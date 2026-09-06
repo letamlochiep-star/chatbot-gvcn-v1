@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tra cứu thông tin học sinh lớp 8A6</title>
+  <style>
+    :root{
+      --bg:#eef6fc;
+      --panel:#ffffff;
+      --panel-soft:#f7fbff;
+      --line:#d8e8f4;
+      --text:#17324a;
+      --muted:#70869a;
+      --primary:#1767a7;
+      --primary-dark:#0f4f83;
+      --primary-soft:#eaf5ff;
+      --shadow:0 16px 45px rgba(25,86,132,.10);
+      --radius:22px;
+    }
+
+    *{box-sizing:border-box}
+
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:Tahoma,Arial,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at top right,#dbeeff 0,transparent 33%),
+        linear-gradient(180deg,#f8fcff 0%,var(--bg) 100%);
+    }
+
+    .app{
+      max-width:1280px;
+      margin:0 auto;
+      padding:22px;
+      display:grid;
+      grid-template-columns:310px minmax(0,1fr);
+      gap:22px;
+      min-height:100vh;
+    }
+
+    /* LEFT */
+    .sidebar{
+      position:sticky;
+      top:22px;
+      align-self:start;
+      background:linear-gradient(160deg,#124f83 0%,#1767a7 58%,#2d82bf 100%);
+      color:#fff;
+      border-radius:28px;
+      padding:28px 22px;
+      box-shadow:0 18px 45px rgba(13,75,122,.22);
+      min-height:calc(100vh - 44px);
+      display:flex;
+      flex-direction:column;
+    }
+
+    .school-badge{
+      width:76px;
+      height:76px;
+      border-radius:22px;
+      background:rgba(255,255,255,.14);
+      border:1px solid rgba(255,255,255,.28);
+      display:grid;
+      place-items:center;
+      font-size:34px;
+      margin-bottom:22px;
+      backdrop-filter:blur(8px);
+    }
+
+    .school-name{
+      font-size:20px;
+      line-height:1.45;
+      font-weight:700;
+      text-transform:uppercase;
+    }
+
+    .school-place{
+      margin-top:8px;
+      color:#dceeff;
+      font-size:13px;
+      line-height:1.5;
+      text-transform:uppercase;
+    }
+
+    .divider{
+      height:1px;
+      background:rgba(255,255,255,.20);
+      margin:24px 0;
+    }
+
+    .side-title{
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.8px;
+      color:#d6ebfb;
+      margin-bottom:12px;
+    }
+
+    .side-list{
+      display:grid;
+      gap:10px;
+    }
+
+    .side-item{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      padding:11px 12px;
+      border-radius:14px;
+      background:rgba(255,255,255,.10);
+      color:#f5fbff;
+      font-size:13px;
+      line-height:1.45;
+    }
+
+    .side-item span:first-child{
+      flex:0 0 auto;
+      font-size:17px;
+    }
+
+    .sidebar-footer{
+      margin-top:auto;
+      padding-top:24px;
+      font-size:11px;
+      color:#d7eaf9;
+      line-height:1.5;
+    }
+
+    /* RIGHT */
+    .main{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+    }
+
+    .hero{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:26px 28px;
+    }
+
+    .hero-kicker{
+      color:var(--primary);
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:.9px;
+      text-transform:uppercase;
+    }
+
+    .hero h1{
+      margin:8px 0 8px;
+      font-size:clamp(25px,3.2vw,38px);
+      line-height:1.25;
+      color:#123f62;
+      text-transform:uppercase;
+    }
+
+    .hero p{
+      margin:0;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.6;
+    }
+
+    .workspace{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+
+    .workspace-head{
+      padding:18px 22px;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      justify-content:space-between;
+      gap:14px;
+      align-items:center;
+      background:linear-gradient(180deg,#ffffff,#f9fcff);
+    }
+
+    .assistant-title{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    .avatar{
+      width:43px;
+      height:43px;
+      border-radius:14px;
+      display:grid;
+      place-items:center;
+      background:var(--primary-soft);
+      color:var(--primary);
+      font-size:22px;
+      border:1px solid #d3e9f9;
+    }
+
+    .assistant-title strong{
+      display:block;
+      color:#164f7a;
+      font-size:15px;
+    }
+
+    .assistant-title small{
+      color:#8498a8;
+      font-size:12px;
+    }
+
+    .search-panel{
+      padding:20px 22px 18px;
+      background:#fff;
+    }
+
+    .search-label{
+      font-size:13px;
+      font-weight:700;
+      color:#345e7a;
+      margin-bottom:8px;
+      text-align:right;
+    }
+
+    .search-row{
+      display:flex;
+      gap:10px;
+      max-width:780px;
+      margin-left:auto;
+    }
+
+    .search-row input{
+      flex:1;
+      min-width:0;
+      height:50px;
+      border:1px solid #c9deed;
+      border-radius:15px;
+      padding:0 15px;
+      outline:none;
+      font:inherit;
+      color:var(--text);
+      background:#fbfdff;
+      text-align:right;
+    }
+
+    .search-row input:focus{
+      border-color:#68a9d7;
+      box-shadow:0 0 0 4px rgba(50,130,190,.11);
+      background:#fff;
+    }
+
+    button{
+      border:0;
+      border-radius:14px;
+      padding:0 18px;
+      min-height:50px;
+      font:inherit;
+      font-weight:700;
+      cursor:pointer;
+      transition:.18s ease;
+    }
+
+    button:hover{transform:translateY(-1px)}
+    button:disabled{opacity:.65;cursor:not-allowed;transform:none}
+
+    .btn-primary{
+      color:#fff;
+      background:linear-gradient(135deg,var(--primary),#2b7eb8);
+      box-shadow:0 8px 20px rgba(23,103,167,.18);
+    }
+
+    .examples{
+      max-width:780px;
+      margin:10px 0 0 auto;
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .chip{
+      border:1px solid #d5e7f4;
+      background:#f7fbff;
+      color:#466d87;
+      border-radius:999px;
+      padding:7px 10px;
+      font-size:12px;
+      cursor:pointer;
+    }
+
+    .answer-wrap{
+      border-top:1px solid var(--line);
+      background:linear-gradient(180deg,#f8fcff,#fff);
+      padding:20px 22px 24px;
+    }
+
+    .answer-title{
+      text-align:right;
+      font-size:13px;
+      font-weight:700;
+      color:#345e7a;
+      margin-bottom:10px;
+    }
+
+    .answer-stream{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:12px;
+      min-height:190px;
+    }
+
+    .bubble{
+      width:min(100%,860px);
+      border-radius:18px;
+      padding:14px 16px;
+      line-height:1.55;
+      font-size:14px;
+      box-shadow:0 7px 18px rgba(40,92,128,.06);
+    }
+
+    .bubble.user{
+      width:auto;
+      max-width:78%;
+      background:linear-gradient(135deg,#1767a7,#2d82bf);
+      color:#fff;
+      border-bottom-right-radius:5px;
+      text-align:right;
+    }
+
+    .bubble.bot{
+      background:#fff;
+      border:1px solid #d8e8f4;
+      color:#23445d;
+      border-bottom-right-radius:5px;
+      text-align:left;
+    }
+
+    .bubble.bot.intro{
+      background:#f3f9fe;
+      color:#3e647e;
+    }
+
+    .results{
+      width:min(100%,920px);
+      margin-left:auto;
+      display:grid;
+      gap:12px;
+    }
+
+    .student-card{
+      border:1px solid #d6e6f2;
+      border-radius:18px;
+      background:#fff;
+      overflow:hidden;
+      box-shadow:0 8px 22px rgba(39,92,130,.06);
+    }
+
+    .student-summary{
+      padding:14px 16px;
+      display:flex;
+      justify-content:space-between;
+      gap:14px;
+      align-items:center;
+      cursor:pointer;
+    }
+
+    .student-summary:hover{
+      background:#fbfdff;
+    }
+
+    .student-name{
+      color:#164f7a;
+      font-weight:700;
+      font-size:15px;
+    }
+
+    .student-meta{
+      margin-top:5px;
+      color:#7b8e9e;
+      font-size:12px;
+    }
+
+    .expand{
+      flex:0 0 auto;
+      color:var(--primary);
+      font-weight:700;
+      font-size:12px;
+    }
+
+    .detail-grid{
+      border-top:1px solid var(--line);
+      padding:14px;
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:10px;
+      background:#fbfdff;
+    }
+
+    .field{
+      border:1px solid #dce9f2;
+      border-radius:13px;
+      background:#fff;
+      padding:10px 11px;
+      min-width:0;
+    }
+
+    .field-label{
+      color:#7890a3;
+      font-size:11px;
+      font-weight:700;
+      text-transform:uppercase;
+      margin-bottom:5px;
+    }
+
+    .field-value{
+      color:#1e415b;
+      font-size:13px;
+      word-break:break-word;
+      min-height:17px;
+    }
+
+    .notice{
+      width:min(100%,860px);
+      margin-left:auto;
+      padding:13px 15px;
+      border-radius:15px;
+      background:#fff8e8;
+      border:1px solid #f0dfb9;
+      color:#876326;
+      line-height:1.5;
+      font-size:13px;
+      text-align:left;
+    }
+
+    .empty{
+      color:#8195a5;
+      text-align:right;
+      font-size:13px;
+      padding:12px 0;
+      width:100%;
+    }
+
+    .spinner{
+      width:18px;
+      height:18px;
+      border:2px solid #c7deed;
+      border-top-color:#1767a7;
+      border-radius:50%;
+      display:inline-block;
+      vertical-align:-4px;
+      margin-left:7px;
+      animation:spin .8s linear infinite;
+    }
+
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    @media(max-width:940px){
+      .app{
+        grid-template-columns:1fr;
+      }
+
+      .sidebar{
+        position:relative;
+        top:auto;
+        min-height:auto;
+      }
+
+      .sidebar-footer{
+        margin-top:22px;
+      }
+    }
+
+    @media(max-width:640px){
+      .app{padding:12px;gap:12px}
+      .hero,.workspace{border-radius:18px}
+      .hero{padding:20px}
+      .workspace-head,.search-panel,.answer-wrap{padding-left:15px;padding-right:15px}
+      .search-row{flex-direction:column}
+      .search-row button{width:100%}
+      .bubble.user{max-width:92%}
+      .detail-grid{grid-template-columns:1fr}
+      .student-summary{align-items:flex-start}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="school-badge">🎓</div>
+
+      <div class="school-name">
+        TRƯỜNG THCS QUANG TRUNG
+      </div>
+      <div class="school-place">
+        XUÂN HƯƠNG - ĐÀ LẠT
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="side-title">TRA CỨU LỚP 8A6</div>
+      <div class="side-list">
+        <div class="side-item">
+          <span>🔢</span>
+          <span>Nhập số thứ tự để tìm chính xác một học sinh.</span>
+        </div>
+        <div class="side-item">
+          <span>🔎</span>
+          <span>Nhập họ tên hoặc một cụm từ để lọc dữ liệu.</span>
+        </div>
+        <div class="side-item">
+          <span>📄</span>
+          <span>Kết quả hiển thị toàn bộ thông tin theo tiêu đề của nguồn dữ liệu.</span>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        Hệ thống hỗ trợ tra cứu thông tin học sinh lớp 8A6.<br>
+        Dữ liệu chỉ hiển thị theo quyền truy cập được cấu hình ở backend.
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="hero">
+        <div class="hero-kicker">HỆ THỐNG TRA CỨU HỌC SINH</div>
+        <h1>TRA CỨU THÔNG TIN HỌC SINH LỚP 8A6</h1>
+        <p>Nhập STT, họ tên hoặc một cụm từ để tìm kiếm và xem hồ sơ học sinh.</p>
+      </section>
+
+      <section class="workspace">
+        <div class="workspace-head">
+          <div class="assistant-title">
+            <div class="avatar">🤖</div>
+            <div>
+              <strong>Trợ lý tra cứu 8A6</strong>
+              <small>Tìm kiếm nhanh theo STT hoặc cụm từ</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="search-panel">
+          <div class="search-label">NHẬP YÊU CẦU TRA CỨU</div>
+          <div class="search-row">
+            <input id="query" autocomplete="off" placeholder="Ví dụ: 12, Nguyễn, Bảo Anh..." />
+            <button id="searchBtn" class="btn-primary" type="button" onclick="searchStudent()">TRA CỨU</button>
+          </div>
+
+          <div class="examples">
+            <span class="chip" onclick="useSample('1')">STT 1</span>
+            <span class="chip" onclick="useSample('Nguyễn')">Nguyễn</span>
+            <span class="chip" onclick="useSample('Bảo Anh')">Bảo Anh</span>
+            <span class="chip" onclick="useSample('Lâm Đồng')">Lâm Đồng</span>
+          </div>
+        </div>
+
+        <div class="answer-wrap">
+          <div class="answer-title">KẾT QUẢ TRẢ LỜI</div>
+          <div id="answerStream" class="answer-stream">
+            <div class="bubble bot intro">
+              Xin chào! Hãy nhập số thứ tự, họ tên hoặc một cụm từ để tra cứu thông tin học sinh lớp 8A6.
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+/*
+  8A6.html - giao diện frontend cho Antigravity
+
+  Endpoint gợi ý:
+    POST /api/search
+    body: { query: "..." }
+
+  Response:
+    {
+      "ok": true,
+      "matches": [
+        {
+          "id": "row-3",
+          "stt": "1",
+          "name": "Nguyễn Văn A",
+          "birthDate": "01/01/2012",
+          "data": {
+            "STT": "1",
+            "Họ và tên": "Nguyễn Văn A",
+            "...": "..."
+          }
+        }
+      ]
+    }
+
+  Giao diện này KHÔNG tự gọi /api/meta khi tải trang,
+  vì vậy sẽ không còn hiển thị lỗi JSON/XML trên màn hình lúc khởi động.
+*/
+
+const API_SEARCH = '/api/search';
+
+const $ = id => document.getElementById(id);
+
+document.addEventListener('DOMContentLoaded', () => {
+  $('query').addEventListener('keydown', e => {
+    if (e.key === 'Enter') searchStudent();
+  });
+});
+
+function useSample(text){
+  $('query').value = text;
+  $('query').focus();
+}
+
+function addBubble(text, type='bot'){
+  const div = document.createElement('div');
+  div.className = `bubble ${type}`;
+  div.textContent = text;
+  $('answerStream').appendChild(div);
+  div.scrollIntoView({behavior:'smooth', block:'nearest'});
+  return div;
+}
+
+async function safeJson(response){
+  const raw = await response.text();
+
+  try{
+    return JSON.parse(raw);
+  }catch{
+    const clean = raw.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+
+    if (raw.trim().startsWith('<')){
+      throw new Error(
+        'Backend chưa trả dữ liệu JSON hợp lệ. Hãy kiểm tra endpoint /api/search trong Antigravity.'
+      );
+    }
+
+    throw new Error(clean || 'Phản hồi từ máy chủ không hợp lệ.');
+  }
+}
+
+async function searchStudent(){
+  const q = $('query').value.trim();
+
+  if(!q){
+    addBubble('Vui lòng nhập STT, họ tên hoặc một cụm từ cần tìm.', 'bot');
+    $('query').focus();
+    return;
+  }
+
+  addBubble(q, 'user');
+  $('query').value = '';
+
+  const btn = $('searchBtn');
+  btn.disabled = true;
+  const wait = addBubble('Đang tra cứu dữ liệu... ', 'bot');
+  wait.innerHTML = 'Đang tra cứu dữ liệu... <span class="spinner"></span>';
+
+  try{
+    const response = await fetch(API_SEARCH,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Accept':'application/json'
+      },
+      cache:'no-store',
+      body:JSON.stringify({query:q})
+    });
+
+    const data = await safeJson(response);
+    wait.remove();
+
+    if(!response.ok || !data.ok){
+      throw new Error(data.message || 'Không thể tra cứu dữ liệu.');
+    }
+
+    renderResults(data.matches || [], q);
+
+  }catch(err){
+    wait.remove();
+    const box = document.createElement('div');
+    box.className = 'notice';
+    box.textContent = err.message;
+    $('answerStream').appendChild(box);
+    box.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function renderResults(matches, query){
+  if(!matches.length){
+    addBubble(`Không tìm thấy học sinh phù hợp với “${query}”.`, 'bot');
+    return;
+  }
+
+  addBubble(
+    matches.length === 1
+      ? `Đã tìm thấy 1 hồ sơ phù hợp với “${query}”.`
+      : `Đã tìm thấy ${matches.length} học sinh phù hợp với “${query}”. Hãy chọn học sinh cần xem.`,
+    'bot'
+  );
+
+  const wrap = document.createElement('div');
+  wrap.className = 'results';
+
+  matches.forEach((m, index) => {
+    const card = document.createElement('div');
+    card.className = 'student-card';
+
+    const name =
+      m.name ||
+      findValue(m.data, ['họ và tên','họ tên','ho va ten','ho ten']) ||
+      `Học sinh ${index + 1}`;
+
+    const stt =
+      m.stt ||
+      findValue(m.data, ['stt','số thứ tự','so thu tu']) ||
+      '';
+
+    const birth =
+      m.birthDate ||
+      findValue(m.data, ['ngày sinh','ngay sinh']) ||
+      '';
+
+    const summary = document.createElement('div');
+    summary.className = 'student-summary';
+    summary.innerHTML = `
+      <div>
+        <div class="student-name">${escapeHtml(name)}</div>
+        <div class="student-meta">
+          ${stt ? `STT: ${escapeHtml(stt)}` : ''}
+          ${birth ? `${stt ? ' · ' : ''}Ngày sinh: ${escapeHtml(birth)}` : ''}
+        </div>
+      </div>
+      <div class="expand">XEM HỒ SƠ ▾</div>
+    `;
+
+    const detail = document.createElement('div');
+    detail.className = 'detail-grid';
+    detail.style.display = matches.length === 1 ? 'grid' : 'none';
+    detail.innerHTML = buildDetailHtml(m.data || {});
+
+    if(matches.length === 1){
+      summary.querySelector('.expand').textContent = 'THU GỌN ▴';
+    }
+
+    summary.addEventListener('click', () => {
+      const open = detail.style.display !== 'none';
+      detail.style.display = open ? 'none' : 'grid';
+      summary.querySelector('.expand').textContent = open ? 'XEM HỒ SƠ ▾' : 'THU GỌN ▴';
+    });
+
+    card.appendChild(summary);
+    card.appendChild(detail);
+    wrap.appendChild(card);
+  });
+
+  $('answerStream').appendChild(wrap);
+  wrap.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function buildDetailHtml(data){
+  const entries = Object.entries(data || {});
+
+  if(!entries.length){
+    return `<div class="empty">Không có dữ liệu hồ sơ để hiển thị.</div>`;
+  }
+
+  return entries.map(([key,val]) => `
+    <div class="field">
+      <div class="field-label">${escapeHtml(key)}</div>
+      <div class="field-value">${escapeHtml(val ?? '') || '—'}</div>
+    </div>
+  `).join('');
+}
+
+function findValue(obj, names){
+  const normalized = Object.entries(obj || {}).map(([k,v]) => [normalizeText(k),v]);
+
+  for(const name of names){
+    const target = normalizeText(name);
+    const item = normalized.find(([k]) => k === target);
+    if(item) return item[1];
+  }
+
+  return '';
+}
+
+function normalizeText(s=''){
+  return String(s)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/đ/g,'d')
+    .replace(/Đ/g,'D')
+    .toLowerCase()
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function escapeHtml(v=''){
+  return String(v)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;');
+}
+</script>
+</body>
+</html>

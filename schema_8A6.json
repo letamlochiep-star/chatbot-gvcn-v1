@@ -1,0 +1,270 @@
+{
+  "source_file": "danh_sach_hoc_sinh_8A6.xlsx",
+  "drive_file_id": "1YDd8tLViu2nzCuoCZSR1XRC9SxbmpgMC",
+  "sheet": "ds học sinh",
+  "header_rows": [
+    1,
+    2
+  ],
+  "data_start_row": 3,
+  "student_count": 43,
+  "column_count": 49,
+  "search": {
+    "stt": {
+      "column": "A",
+      "mode": "exact",
+      "numeric_max_digits": 3
+    },
+    "name": {
+      "column": "F",
+      "mode": "contains_normalized_vietnamese"
+    }
+  },
+  "fields": [
+    {
+      "index": 1,
+      "column": "A",
+      "label": "STT"
+    },
+    {
+      "index": 2,
+      "column": "B",
+      "label": "Mã học sinh"
+    },
+    {
+      "index": 3,
+      "column": "C",
+      "label": "Mã VEMIS"
+    },
+    {
+      "index": 4,
+      "column": "D",
+      "label": "Mã MOET"
+    },
+    {
+      "index": 5,
+      "column": "E",
+      "label": "Sổ đăng bộ"
+    },
+    {
+      "index": 6,
+      "column": "F",
+      "label": "Họ và tên"
+    },
+    {
+      "index": 7,
+      "column": "G",
+      "label": "Ngày sinh"
+    },
+    {
+      "index": 8,
+      "column": "H",
+      "label": "Ngày vào trường"
+    },
+    {
+      "index": 9,
+      "column": "I",
+      "label": "Giới tính"
+    },
+    {
+      "index": 10,
+      "column": "J",
+      "label": "Quốc tịch"
+    },
+    {
+      "index": 11,
+      "column": "K",
+      "label": "Chỗ ở hiện nay - SN/Xóm"
+    },
+    {
+      "index": 12,
+      "column": "L",
+      "label": "Chỗ ở hiện nay - Khu dân cư"
+    },
+    {
+      "index": 13,
+      "column": "M",
+      "label": "Chỗ ở hiện nay - Xã/Phường"
+    },
+    {
+      "index": 14,
+      "column": "N",
+      "label": "Chỗ ở hiện nay - Tỉnh/Tp"
+    },
+    {
+      "index": 15,
+      "column": "O",
+      "label": "Hộ khẩu thường trú - SN/Xóm"
+    },
+    {
+      "index": 16,
+      "column": "P",
+      "label": "Hộ khẩu thường trú - Khu dân cư"
+    },
+    {
+      "index": 17,
+      "column": "Q",
+      "label": "Hộ khẩu thường trú - Xã/Phường"
+    },
+    {
+      "index": 18,
+      "column": "R",
+      "label": "Hộ khẩu thường trú - Tỉnh/Tp"
+    },
+    {
+      "index": 19,
+      "column": "S",
+      "label": "Nơi sinh - Thông tin nơi sinh"
+    },
+    {
+      "index": 20,
+      "column": "T",
+      "label": "Nơi sinh - Xã/Phường"
+    },
+    {
+      "index": 21,
+      "column": "U",
+      "label": "Nơi sinh - Tỉnh/Tp"
+    },
+    {
+      "index": 22,
+      "column": "V",
+      "label": "Quê quán - Thông tin quê quán"
+    },
+    {
+      "index": 23,
+      "column": "W",
+      "label": "Quê quán - Xã/Phường"
+    },
+    {
+      "index": 24,
+      "column": "X",
+      "label": "Quê quán - Tỉnh/Tp"
+    },
+    {
+      "index": 25,
+      "column": "Y",
+      "label": "Nơi khai sinh - Xã/Phường"
+    },
+    {
+      "index": 26,
+      "column": "Z",
+      "label": "Nơi khai sinh - Tỉnh/Tp"
+    },
+    {
+      "index": 27,
+      "column": "AA",
+      "label": "Căn cước"
+    },
+    {
+      "index": 28,
+      "column": "AB",
+      "label": "Ngày cấp Căn cước"
+    },
+    {
+      "index": 29,
+      "column": "AC",
+      "label": "Nơi cấp Căn cước"
+    },
+    {
+      "index": 30,
+      "column": "AD",
+      "label": "Dân tộc"
+    },
+    {
+      "index": 31,
+      "column": "AE",
+      "label": "Tôn giáo"
+    },
+    {
+      "index": 32,
+      "column": "AF",
+      "label": "Diện chính sách"
+    },
+    {
+      "index": 33,
+      "column": "AG",
+      "label": "Cận nghèo"
+    },
+    {
+      "index": 34,
+      "column": "AH",
+      "label": "Đoàn viên"
+    },
+    {
+      "index": 35,
+      "column": "AI",
+      "label": "Đội viên"
+    },
+    {
+      "index": 36,
+      "column": "AJ",
+      "label": "Tên cha"
+    },
+    {
+      "index": 37,
+      "column": "AK",
+      "label": "Nghề nghiệp cha"
+    },
+    {
+      "index": 38,
+      "column": "AL",
+      "label": "Năm sinh cha"
+    },
+    {
+      "index": 39,
+      "column": "AM",
+      "label": "Tên mẹ"
+    },
+    {
+      "index": 40,
+      "column": "AN",
+      "label": "Nghề nghiệp mẹ"
+    },
+    {
+      "index": 41,
+      "column": "AO",
+      "label": "Năm sinh mẹ"
+    },
+    {
+      "index": 42,
+      "column": "AP",
+      "label": "Điện thoại SLL"
+    },
+    {
+      "index": 43,
+      "column": "AQ",
+      "label": "Email SLL"
+    },
+    {
+      "index": 44,
+      "column": "AR",
+      "label": "Điện thoại bố"
+    },
+    {
+      "index": 45,
+      "column": "AS",
+      "label": "Điện thoại mẹ"
+    },
+    {
+      "index": 46,
+      "column": "AT",
+      "label": "Điện thoại HS"
+    },
+    {
+      "index": 47,
+      "column": "AU",
+      "label": "Khuyết tật"
+    },
+    {
+      "index": 48,
+      "column": "AV",
+      "label": "N.trú, B.trú"
+    },
+    {
+      "index": 49,
+      "column": "AW",
+      "label": "Ghi chú"
+    }
+  ]
+}
