@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateApiRequest } from "@/lib/auth";
-import { getAttendanceByDate, saveAttendance, getAttendanceSummary } from "@/lib/db";
+import {
+  getAttendanceByDate,
+  saveAttendance,
+  getAttendanceSummary,
+  getAllAttendance,
+} from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +21,17 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
   const summary = searchParams.get("summary");
+  const all = searchParams.get("all");
 
   try {
     if (summary === "true") {
       const attendanceSummary = await getAttendanceSummary();
       return NextResponse.json({ ok: true, summary: attendanceSummary });
+    }
+
+    if (all === "true") {
+      const allAttendance = await getAllAttendance();
+      return NextResponse.json({ ok: true, attendance: allAttendance });
     }
 
     const targetDate = date || new Date().toISOString().split("T")[0];
