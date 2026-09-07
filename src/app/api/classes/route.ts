@@ -3,6 +3,7 @@ import { getServerSession } from "@/lib/auth";
 import {
   getAllClasses,
   getGradeCompetitionSummary,
+  getPeriodCompetitionSummary,
   updateClassInfo,
   createClass,
   deleteClass,
@@ -15,6 +16,7 @@ import {
   resetAllTeacherPasswords,
   importTeacherAccounts,
 } from "@/lib/db";
+import { CompetitionPeriod } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,6 +25,7 @@ export async function GET(request: NextRequest) {
     const teacherAccounts = searchParams.get("teacherAccounts") === "true";
     const grade = parseInt(searchParams.get("grade") || "0", 10);
     const week = parseInt(searchParams.get("week") || "1", 10);
+    const period = (searchParams.get("period") || "week") as CompetitionPeriod;
     const classId = searchParams.get("classId");
 
     if (teacherAccounts) {
@@ -31,8 +34,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (summary) {
-      const gradeSummary = await getGradeCompetitionSummary(week, grade);
-      return NextResponse.json({ ok: true, summary: gradeSummary });
+      const periodSummary = await getPeriodCompetitionSummary(period, week, grade);
+      return NextResponse.json({ ok: true, summary: periodSummary });
     }
 
     const classes = await getAllClasses(grade);

@@ -2,7 +2,15 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { ClassInfo, GradeCompetitionSummary, CloudSyncStatus, SchoolSecurityRole, TeacherAccountInfo } from "@/lib/types";
+import {
+  ClassInfo,
+  GradeCompetitionSummary,
+  CloudSyncStatus,
+  SchoolSecurityRole,
+  TeacherAccountInfo,
+  CompetitionPeriod,
+  PeriodCompetitionSummary,
+} from "@/lib/types";
 
 interface Props {
   onClose: () => void;
@@ -21,9 +29,10 @@ export function GradeAdminModal({
     "ranking" | "inspect" | "teachers" | "accounts" | "cloud_sync" | "security" | "export"
   >("ranking");
   const [loading, setLoading] = useState(false);
+  const [period, setPeriod] = useState<CompetitionPeriod>("week");
   const [week, setWeek] = useState<number>(1);
   const [grade, setGrade] = useState<number>(0); // 0: Toàn trường, 6: Khối 6, 7: Khối 7, 8: Khối 8, 9: Khối 9
-  const [summary, setSummary] = useState<GradeCompetitionSummary | null>(null);
+  const [summary, setSummary] = useState<PeriodCompetitionSummary | null>(null);
 
   // Inspector state
   const [inspectClassId, setInspectClassId] = useState<string>(currentClassId);
@@ -100,11 +109,11 @@ export function GradeAdminModal({
   // Security Matrix state
   const [securityRoles, setSecurityRoles] = useState<SchoolSecurityRole[]>([]);
 
-  // 1. Tải bảng tổng hợp thi đua khối / toàn trường
-  const fetchGradeSummary = async (targetWeek: number, targetGrade: number) => {
+  // 1. Tải bảng tổng hợp thi đua khối / toàn trường theo kỳ
+  const fetchGradeSummary = async (targetPeriod: CompetitionPeriod = period, targetWeek: number = week, targetGrade: number = grade) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/classes?summary=true&week=${targetWeek}&grade=${targetGrade}`);
+      const res = await fetch(`/api/classes?summary=true&period=${targetPeriod}&week=${targetWeek}&grade=${targetGrade}`);
       if (res.ok) {
         const data = await res.json();
         if (data.ok && data.summary) {
@@ -117,6 +126,10 @@ export function GradeAdminModal({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchGradeSummary(period, week, grade);
+  }, [period, week, grade]);
 
   // 2. Tải danh sách tài khoản GVCN
   const fetchTeacherAccounts = async () => {
@@ -152,9 +165,6 @@ export function GradeAdminModal({
     }
   };
 
-  useEffect(() => {
-    fetchGradeSummary(week, grade);
-  }, [week, grade]);
 
   useEffect(() => {
     fetchTeacherAccounts();
@@ -231,7 +241,7 @@ export function GradeAdminModal({
       if (res.ok && data.ok) {
         alert(`✓ Đã cập nhật phân công GVCN ${editingClass.className} thành công!`);
         setEditingClass(null);
-        fetchGradeSummary(week, grade);
+        fetchGradeSummary(period, week, grade);
         fetchTeacherAccounts();
       } else {
         alert(data.message || "Lỗi khi cập nhật");
@@ -280,7 +290,7 @@ export function GradeAdminModal({
         setNewClassPhone("");
         setNewClassEmail("");
         setNewClassRoom("");
-        fetchGradeSummary(week, grade);
+        fetchGradeSummary(period, week, grade);
         fetchTeacherAccounts();
       } else {
         alert(data.message || "Không thể tạo lớp học.");
@@ -320,15 +330,15 @@ export function GradeAdminModal({
       const data = await res.json();
       if (res.ok && data.ok) {
         alert(`✓ Đã xóa lớp ${c.className} thành công!`);
-        fetchGradeSummary(week, grade);
+        fetchGradeSummary(period, week, grade);
         fetchTeacherAccounts();
       } else {
         alert(data.message || "Không thể xóa lớp.");
-        fetchGradeSummary(week, grade);
+        fetchGradeSummary(period, week, grade);
       }
     } catch {
       alert("Lỗi kết nối máy chủ");
-      fetchGradeSummary(week, grade);
+      fetchGradeSummary(period, week, grade);
     }
   };
 
@@ -352,12 +362,12 @@ export function GradeAdminModal({
       const data = await res.json();
       if (res.ok && data.ok) {
         alert("✓ Đã làm sạch danh mục lớp demo! Bạn có thể nhập danh sách lớp mới từ file Excel.");
-        fetchGradeSummary(week, grade);
+        fetchGradeSummary(period, week, grade);
         fetchTeacherAccounts();
       }
     } catch {
       alert("Lỗi kết nối máy chủ");
-      fetchGradeSummary(week, grade);
+      fetchGradeSummary(period, week, grade);
     }
   };
 
@@ -376,7 +386,7 @@ export function GradeAdminModal({
       const data = await res.json();
       if (res.ok && data.ok) {
         alert("✓ Đã khôi phục 32 lớp mẫu thành công!");
-        fetchGradeSummary(week, grade);
+        fetchGradeSummary(period, week, grade);
         fetchTeacherAccounts();
       }
     } catch {
@@ -496,7 +506,7 @@ export function GradeAdminModal({
         alert(`✓ ${data.message}`);
         setShowImportExcelModal(false);
         setImportedPreviewClasses([]);
-        fetchGradeSummary(week, grade);
+        fetchGradeSummary(period, week, grade);
         fetchTeacherAccounts();
       } else {
         alert(data.message || "Lỗi khi lưu danh sách lớp");
@@ -777,54 +787,148 @@ export function GradeAdminModal({
     }
   };
 
-  // Xuất báo cáo Tổng hợp thi đua Toàn trường
+  // Xuất file Excel bảng thi đua theo mốc thời gian (Tuần / HK1 / HK2 / Cả Năm)
+  const handleExportExcelPeriod = () => {
+    if (!summary?.classes) return;
+    let filename = "";
+    let rows: any[] = [];
+
+    if (period === "week") {
+      filename = `ThiDua_Tuan_${week}_${grade === 0 ? "ToanTruong" : `Khoi_${grade}`}.xlsx`;
+      rows = summary.classes.map((c) => ({
+        "Hạng": c.rank,
+        "Lớp": c.className,
+        "Khối": c.grade,
+        "GVCN": c.teacherName,
+        "Phòng": c.room,
+        "Sĩ Số": c.studentCount,
+        "Điểm Tuần": c.avgScore?.toFixed(1) || "100.0",
+        "Thưởng (+)": `+${c.totalPlus || 0}`,
+        "Phạt (-)": `-${c.totalMinus || 0}`,
+        "Xếp Loại": c.gradeClassification || "Tốt",
+      }));
+    } else if (period === "semester1") {
+      filename = `TongKet_ThiDua_HocKy1_${grade === 0 ? "ToanTruong" : `Khoi_${grade}`}.xlsx`;
+      rows = summary.classes.map((c) => ({
+        "Hạng HK1": c.rank,
+        "Lớp": c.className,
+        "Khối": c.grade,
+        "GVCN": c.teacherName,
+        "Phòng": c.room,
+        "Sĩ Số": c.studentCount,
+        "Điểm TB HK1": c.semester1Score?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0",
+        "Tổng Thưởng HK1": `+${c.totalPlus || 0}`,
+        "Tổng Phạt HK1": `-${c.totalMinus || 0}`,
+        "Xếp Loại HK1": c.gradeClassification || "Tốt",
+      }));
+    } else if (period === "semester2") {
+      filename = `TongKet_ThiDua_HocKy2_${grade === 0 ? "ToanTruong" : `Khoi_${grade}`}.xlsx`;
+      rows = summary.classes.map((c) => ({
+        "Hạng HK2": c.rank,
+        "Lớp": c.className,
+        "Khối": c.grade,
+        "GVCN": c.teacherName,
+        "Điểm TB HK1": c.semester1Score?.toFixed(1) || "---",
+        "Điểm TB HK2": c.semester2Score?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0",
+        "Biến Động Thứ Hạng": c.progressTrend === "up" ? "Tăng hạng ⬆" : c.progressTrend === "down" ? "Giảm hạng ⬇" : "Giữ hạng ⏺",
+        "Tổng Thưởng HK2": `+${c.totalPlus || 0}`,
+        "Tổng Phạt HK2": `-${c.totalMinus || 0}`,
+        "Xếp Loại HK2": c.gradeClassification || "Tốt",
+      }));
+    } else {
+      filename = `TongKet_ThiDua_CaNam_2024_2025_${grade === 0 ? "ToanTruong" : `Khoi_${grade}`}.xlsx`;
+      rows = summary.classes.map((c) => ({
+        "Hạng Cả Năm": c.rank,
+        "Lớp": c.className,
+        "Khối": c.grade,
+        "GVCN": c.teacherName,
+        "Sĩ Số": c.studentCount,
+        "Điểm TB HK1": c.semester1Score?.toFixed(1) || "---",
+        "Điểm TB HK2": c.semester2Score?.toFixed(1) || "---",
+        "Điểm Cả Năm": c.yearScore?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0",
+        "Danh Hiệu Thi Đua Trao Tặng": c.yearTitle || "Tập Thể Lớp Tiên Tiến",
+        "Xếp Loại": c.gradeClassification || "Xuất sắc",
+      }));
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "TongKetThiDua");
+    XLSX.writeFile(wb, filename);
+  };
+
+  // Xuất báo cáo In Tổng hợp thi đua Toàn trường
   const handleExportRankingReport = () => {
     if (!summary?.classes) return;
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
+    const reportTitle =
+      period === "week"
+        ? `BẢNG TỔNG HỢP XẾP HẠNG THI ĐUA NỀ NẾP ${grade === 0 ? "TOÀN TRƯỜNG" : `KHỐI ${grade}`} - TUẦN ${week}`
+        : period === "semester1"
+        ? `BẢNG TỔNG KẾT THI ĐUA NỀ NẾP HỌC KỲ I (TUẦN 1 - 18) • ${grade === 0 ? "TOÀN TRƯỜNG" : `KHỐI ${grade}`}`
+        : period === "semester2"
+        ? `BẢNG TỔNG KẾT THI ĐUA NỀ NẾP HỌC KỲ II (TUẦN 19 - 35) • ${grade === 0 ? "TOÀN TRƯỜNG" : `KHỐI ${grade}`}`
+        : `BẢNG TỔNG KẾT THI ĐUA NỀ NẾP CẢ NĂM HỌC 2024 - 2025 • ${grade === 0 ? "TOÀN TRƯỜNG" : `KHỐI ${grade}`}`;
+
+    const subtitle =
+      period === "week"
+        ? `Tuần thứ ${week} • Năm học 2024 - 2025`
+        : period === "semester1"
+        ? `Học Kỳ I • Năm học 2024 - 2025 (18 tuần thi đua)`
+        : period === "semester2"
+        ? `Học Kỳ II • Năm học 2024 - 2025 (17 tuần thi đua)`
+        : `Tổng Kết Toàn Diện 35 Tuần • Năm học 2024 - 2025`;
+
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Bảng Tổng Hợp Thi Đua ${grade === 0 ? "Toàn Trường" : `Khối ${grade}`} - Tuần ${week}</title>
+        <title>${reportTitle}</title>
         <meta charset="utf-8" />
         <style>
           body { font-family: 'Times New Roman', serif; padding: 25px; color: #111; }
           .header { text-align: center; margin-bottom: 20px; line-height: 1.4; }
-          .title { font-size: 18px; font-weight: bold; text-transform: uppercase; margin-top: 10px; }
-          .subtitle { font-size: 14px; font-style: italic; }
-          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
-          th, td { border: 1px solid #333; padding: 7px 5px; text-align: center; }
-          th { background-color: #f2f2f2; font-weight: bold; }
+          .title { font-size: 17px; font-weight: bold; text-transform: uppercase; margin-top: 10px; color: #1e3a8a; }
+          .subtitle { font-size: 13px; font-style: italic; color: #555; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12.5px; }
+          th, td { border: 1px solid #333; padding: 6px 4px; text-align: center; }
+          th { background-color: #f1f5f9; font-weight: bold; }
           .left { text-align: left; }
-          .gold { background-color: #fff9db; font-weight: bold; }
+          .gold { background-color: #fef9c3; font-weight: bold; }
           .footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 13px; }
           .sig-box { text-align: center; width: 220px; }
+          .insights { margin-top: 15px; padding: 10px; background-color: #f8fafc; border: 1px solid #cbd5e1; font-size: 12px; }
         </style>
       </head>
       <body>
         <div class="header">
           <div>TRƯỜNG THCS QUANG TRUNG - TP ĐÀ LẠT</div>
           <div style="font-weight: bold;">HỘI ĐỒNG THI ĐUA KHEN THƯỞNG</div>
-          <div class="title">BẢNG TỔNG HỢP XẾP HẠNG THI ĐUA NỀ NẾP ${grade === 0 ? "TOÀN TRƯỜNG" : `KHỐI ${grade}`}</div>
-          <div class="subtitle">Tuần thứ ${week} • Năm học 2024 - 2025</div>
+          <div class="title">${reportTitle}</div>
+          <div class="subtitle">${subtitle}</div>
         </div>
 
         <table>
           <thead>
             <tr>
-              <th style="width: 40px;">Hạng</th>
+              <th style="width: 35px;">Hạng</th>
               <th>Lớp</th>
               <th>Khối</th>
               <th>Giáo Viên Chủ Nhiệm</th>
-              <th>Phòng Học</th>
+              <th>Phòng</th>
               <th>Sĩ Số</th>
-              <th>Điểm Tuần</th>
-              <th>Thưởng (+)</th>
-              <th>Vi Phạm (-)</th>
-              <th>Tỷ Lệ Tốt</th>
+              ${
+                period === "year"
+                  ? `<th>ĐTB HK1</th><th>ĐTB HK2</th><th>ĐTB Cả Năm</th><th>Danh Hiệu Trao Tặng</th>`
+                  : period === "semester2"
+                  ? `<th>ĐTB HK1</th><th>ĐTB HK2</th><th>Biến Động</th><th>Tổng Thưởng</th><th>Tổng Phạt</th><th>Xếp Loại</th>`
+                  : period === "semester1"
+                  ? `<th>ĐTB HK1</th><th>Tổng Thưởng</th><th>Tổng Phạt</th><th>Xếp Loại</th>`
+                  : `<th>Điểm Tuần</th><th>Thưởng (+)</th><th>Vi Phạm (-)</th><th>Xếp Loại</th>`
+              }
             </tr>
           </thead>
           <tbody>
@@ -838,10 +942,15 @@ export function GradeAdminModal({
                 <td class="left">${c.teacherName}</td>
                 <td>${c.room}</td>
                 <td>${c.studentCount}</td>
-                <td><strong>${c.avgScore?.toFixed(1) || "100.0"}</strong></td>
-                <td style="color: #0d6e64;">+${c.totalPlus || 0}</td>
-                <td style="color: #b91c1c;">-${c.totalMinus || 0}</td>
-                <td>${c.conductRate || 98}%</td>
+                ${
+                  period === "year"
+                    ? `<td>${c.semester1Score?.toFixed(1) || "---"}</td><td>${c.semester2Score?.toFixed(1) || "---"}</td><td><strong>${c.yearScore?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0"}</strong></td><td><strong>${c.yearTitle || "Tập Thể Lớp Tiên Tiến"}</strong></td>`
+                    : period === "semester2"
+                    ? `<td>${c.semester1Score?.toFixed(1) || "---"}</td><td><strong>${c.semester2Score?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0"}</strong></td><td>${c.progressTrend === "up" ? "Tăng ⬆" : c.progressTrend === "down" ? "Giảm ⬇" : "Giữ ⏺"}</td><td style="color: #0d6e64;">+${c.totalPlus || 0}</td><td style="color: #b91c1c;">-${c.totalMinus || 0}</td><td>${c.gradeClassification || "Tốt"}</td>`
+                    : period === "semester1"
+                    ? `<td><strong>${c.semester1Score?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0"}</strong></td><td style="color: #0d6e64;">+${c.totalPlus || 0}</td><td style="color: #b91c1c;">-${c.totalMinus || 0}</td><td>${c.gradeClassification || "Tốt"}</td>`
+                    : `<td><strong>${c.avgScore?.toFixed(1) || "100.0"}</strong></td><td style="color: #0d6e64;">+${c.totalPlus || 0}</td><td style="color: #b91c1c;">-${c.totalMinus || 0}</td><td>${c.gradeClassification || "Tốt"}</td>`
+                }
               </tr>
             `
               )
@@ -849,8 +958,9 @@ export function GradeAdminModal({
           </tbody>
         </table>
 
-        <div style="margin-top: 15px; font-size: 12px; font-style: italic;">
-          * Điểm trung bình toàn trường: ${summary.gradeAvgScore || 100} đ • Lớp dẫn đầu: ${summary.topClass || "---"}
+        <div class="insights">
+          <div><strong>* Tổng kết tình hình chung:</strong> ${summary.overallAssessment || ""}</div>
+          <div style="margin-top: 4px;"><strong>* Điểm TB ${period === "year" ? "Cả Năm" : period === "semester1" ? "Học Kỳ I" : period === "semester2" ? "Học Kỳ II" : `Tuần ${week}`}:</strong> ${summary.periodAvgScore || 100} đ • <strong>Lớp Dẫn Đầu:</strong> ${summary.topClass || "---"}</div>
         </div>
 
         <div class="footer">
@@ -871,9 +981,6 @@ export function GradeAdminModal({
     printWindow.document.write(htmlContent);
     printWindow.document.close();
     printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 400);
   };
 
   return (
@@ -1022,50 +1129,125 @@ export function GradeAdminModal({
             </button>
           </div>
 
-          {/* LỌC TUẦN & KHỐI CHO BẢNG THI ĐUA */}
-          <div className="flex items-center space-x-2 text-xs font-semibold">
-            <span className="text-slate-500">Tuần:</span>
-            <select
-              value={week}
-              onChange={(e) => setWeek(Number(e.target.value))}
-              className="px-2 py-1 bg-slate-100 border border-slate-300 rounded font-bold text-slate-800 outline-none cursor-pointer"
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((w) => (
-                <option key={w} value={w}>
-                  Tuần {w}
-                </option>
+          {/* LỌC KỲ / TUẦN / KHỐI & HÀNH ĐỘNG IN/XUẤT */}
+          <div className="flex items-center space-x-2 text-xs font-semibold flex-wrap gap-y-1">
+            {/* BỘ CHỌN MỐC THỜI GIAN THI ĐUA */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-300">
+              <button
+                type="button"
+                onClick={() => setPeriod("week")}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 ${
+                  period === "week"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>📅</span>
+                <span>Theo Tuần</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPeriod("semester1")}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 ${
+                  period === "semester1"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>📘</span>
+                <span>Học Kỳ I</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPeriod("semester2")}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 ${
+                  period === "semester2"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>📙</span>
+                <span>Học Kỳ II</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPeriod("year")}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 ${
+                  period === "year"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>🏆</span>
+                <span>Cả Năm</span>
+              </button>
+            </div>
+
+            {/* CHỌN TUẦN KHI Ở CHẾ ĐỘ THEO TUẦN */}
+            {period === "week" && (
+              <div className="flex items-center space-x-1">
+                <span className="text-slate-500">Tuần:</span>
+                <select
+                  value={week}
+                  onChange={(e) => setWeek(Number(e.target.value))}
+                  className="px-2 py-1 bg-slate-100 border border-slate-300 rounded font-bold text-slate-800 outline-none cursor-pointer"
+                >
+                  {Array.from({ length: 35 }, (_, i) => i + 1).map((w) => (
+                    <option key={w} value={w}>
+                      Tuần {w}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* BỘ LỌC KHỐI LỚP */}
+            <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg border border-slate-300">
+              <button
+                type="button"
+                onClick={() => setGrade(0)}
+                className={`px-2 py-1 rounded text-xs font-bold cursor-pointer ${
+                  grade === 0 ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Toàn Trường
+              </button>
+              {[6, 7, 8, 9].map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGrade(g)}
+                  className={`px-2 py-1 rounded text-xs font-bold cursor-pointer ${
+                    grade === g ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Khối {g}
+                </button>
               ))}
-            </select>
+            </div>
+
+            {/* NÚT XUẤT EXCEL & IN TRỰC TIẾP */}
+            <button
+              type="button"
+              onClick={handleExportExcelPeriod}
+              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer shadow-xs"
+              title="Xuất bảng điểm thi đua ra file Excel"
+            >
+              <span>📥</span>
+              <span>Xuất Excel</span>
+            </button>
 
             <button
-              onClick={() => setGrade(0)}
-              className={`px-2 py-1 rounded cursor-pointer ${grade === 0 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              type="button"
+              onClick={handleExportRankingReport}
+              className="px-2.5 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer shadow-xs"
+              title="In bảng tổng kết thi đua A4"
             >
-              Toàn Trường
-            </button>
-            <button
-              onClick={() => setGrade(6)}
-              className={`px-2 py-1 rounded cursor-pointer ${grade === 6 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              Khối 6
-            </button>
-            <button
-              onClick={() => setGrade(7)}
-              className={`px-2 py-1 rounded cursor-pointer ${grade === 7 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              Khối 7
-            </button>
-            <button
-              onClick={() => setGrade(8)}
-              className={`px-2 py-1 rounded cursor-pointer ${grade === 8 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              Khối 8
-            </button>
-            <button
-              onClick={() => setGrade(9)}
-              className={`px-2 py-1 rounded cursor-pointer ${grade === 9 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              Khối 9
+              <span>🖨️</span>
+              <span>In Báo Cáo</span>
             </button>
           </div>
         </div>
@@ -1074,7 +1256,7 @@ export function GradeAdminModal({
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/60">
 
           {/* ========================================================= */}
-          {/* TAB 1: BẢNG XẾP HẠNG THI ĐUA */}
+          {/* TAB 1: BẢNG XẾP HẠNG & TỔNG KẾT THI ĐUA */}
           {/* ========================================================= */}
           {activeTab === "ranking" && (
             <div className="space-y-6">
@@ -1096,10 +1278,18 @@ export function GradeAdminModal({
 
                 <div className="bg-white p-4 rounded-xl border border-amber-100 shadow-sm flex items-center space-x-3.5">
                   <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl font-bold">
-                    🥇
+                    {period === "year" ? "🏆" : "🥇"}
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500 font-medium">Lớp Dẫn Đầu Tuần {week}</div>
+                    <div className="text-xs text-slate-500 font-medium truncate">
+                      {period === "year"
+                        ? "Cờ Dẫn Đầu Cả Năm"
+                        : period === "semester1"
+                        ? "Lớp Quán Quân HK I"
+                        : period === "semester2"
+                        ? "Lớp Quán Quân HK II"
+                        : `Lớp Dẫn Đầu Tuần ${week}`}
+                    </div>
                     <div className="text-lg font-bold text-amber-700 truncate">
                       {summary?.topClass || "Lớp 8A6"}
                     </div>
@@ -1111,7 +1301,9 @@ export function GradeAdminModal({
                     🌟
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500 font-medium">Tổng Khen Thưởng</div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      {period === "year" ? "Khen Thưởng Cả Năm" : period === "semester1" ? "Khen Thưởng HK I" : period === "semester2" ? "Khen Thưởng HK II" : "Khen Thưởng Tuần"}
+                    </div>
                     <div className="text-xl font-bold text-emerald-700">
                       +{summary?.classes.reduce((s, c) => s + (c.totalPlus || 0), 0) || 0} <span className="text-xs font-normal text-slate-500">Lượt</span>
                     </div>
@@ -1123,7 +1315,9 @@ export function GradeAdminModal({
                     ⚠️
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500 font-medium">Tổng Vi Phạm Tuần</div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      {period === "year" ? "Vi Phạm Cả Năm" : period === "semester1" ? "Vi Phạm HK I" : period === "semester2" ? "Vi Phạm HK II" : "Vi Phạm Tuần"}
+                    </div>
                     <div className="text-xl font-bold text-rose-700">
                       -{summary?.classes.reduce((s, c) => s + (c.totalMinus || 0), 0) || 0} <span className="text-xs font-normal text-slate-500">Sự vụ</span>
                     </div>
@@ -1131,7 +1325,139 @@ export function GradeAdminModal({
                 </div>
               </div>
 
-              {/* BẢNG XẾP HẠNG CHI TIẾT */}
+              {/* KHỐI THEO DÕI TÌNH HÌNH CHUNG & PHÂN TÍCH CHUYÊN SÂU CỦA BGH */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3 flex-wrap gap-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-lg">📊</span>
+                    <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight">
+                      Tổng Hợp Tình Hình Nề Nếp & Thi Đua Chung • {summary?.periodLabel || "Học Kỳ I"}
+                    </h3>
+                  </div>
+                  <div className="flex items-center space-x-2 text-xs">
+                    <span className="text-slate-500">Điểm TB Thi Đua:</span>
+                    <span className="px-2.5 py-0.5 bg-blue-100 text-blue-900 font-black rounded-lg text-sm">
+                      {summary?.periodAvgScore || 100} đ
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3 CỘT PHÂN TÍCH: VI PHẠM PHỔ BIẾN - THÀNH TÍCH TIÊU BIỂU - PHÂN BỐ XẾP LOẠI */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {/* CỘT 1: TOP 5 VI PHẠM CẦN CHẤN CHỈNH */}
+                  <div className="p-3.5 bg-rose-50/50 rounded-xl border border-rose-200/80 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-rose-900 flex items-center space-x-1.5">
+                        <span>🚨</span>
+                        <span>Top Vi Phạm Cần Chấn Chỉnh</span>
+                      </span>
+                      <span className="text-[11px] font-semibold text-rose-700">
+                        {summary?.totalMinusEvents || 0} vụ
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      {(summary?.commonViolations || []).map((v, i) => (
+                        <div key={i} className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-800 font-semibold truncate pr-2">
+                              {i + 1}. [{v.code}] {v.name}
+                            </span>
+                            <span className="font-bold text-rose-700 shrink-0">
+                              {v.count} vụ (-{v.points}đ)
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-rose-200/60 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-rose-500 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, Math.max(10, v.percent))}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CỘT 2: TOP 5 THÀNH TÍCH TIÊU BIỂU */}
+                  <div className="p-3.5 bg-emerald-50/50 rounded-xl border border-emerald-200/80 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-emerald-900 flex items-center space-x-1.5">
+                        <span>🌟</span>
+                        <span>Top Khen Thưởng & Điểm Sáng</span>
+                      </span>
+                      <span className="text-[11px] font-semibold text-emerald-700">
+                        {summary?.totalPlusEvents || 0} lượt
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      {(summary?.topAchievements || []).map((a, i) => (
+                        <div key={i} className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-800 font-semibold truncate pr-2">
+                              {i + 1}. [{a.code}] {a.name}
+                            </span>
+                            <span className="font-bold text-emerald-700 shrink-0">
+                              {a.count} lượt (+{a.points}đ)
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-emerald-200/60 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, Math.max(10, a.percent))}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CỘT 3: PHÂN BỐ XẾP LOẠI & ĐÁNH GIÁ BGH */}
+                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                    <div className="font-bold text-slate-900 text-xs flex items-center space-x-1.5">
+                      <span>📈</span>
+                      <span>Phân Bố Xếp Loại Toàn Trường</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                      <div className="p-2 bg-emerald-100/70 rounded-lg border border-emerald-200">
+                        <div className="text-[10px] text-emerald-800 font-bold uppercase">Xuất Sắc</div>
+                        <div className="text-base font-black text-emerald-900 mt-0.5">
+                          {summary?.conductDistribution.excellent || 0} <span className="text-[10px] font-normal">lớp</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-blue-100/70 rounded-lg border border-blue-200">
+                        <div className="text-[10px] text-blue-800 font-bold uppercase">Tốt</div>
+                        <div className="text-base font-black text-blue-900 mt-0.5">
+                          {summary?.conductDistribution.good || 0} <span className="text-[10px] font-normal">lớp</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-amber-100/70 rounded-lg border border-amber-200">
+                        <div className="text-[10px] text-amber-800 font-bold uppercase">Khá</div>
+                        <div className="text-base font-black text-amber-900 mt-0.5">
+                          {summary?.conductDistribution.fair || 0} <span className="text-[10px] font-normal">lớp</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-slate-200/80 rounded-lg border border-slate-300">
+                        <div className="text-[10px] text-slate-700 font-bold uppercase">Cần Cố Gắng</div>
+                        <div className="text-base font-black text-slate-800 mt-0.5">
+                          {summary?.conductDistribution.poor || 0} <span className="text-[10px] font-normal">lớp</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 bg-blue-50/60 rounded-lg border border-blue-200 text-xs text-slate-700 leading-relaxed">
+                      <div className="font-bold text-blue-900 text-[11px] mb-1">📝 Nhận xét khái quát BGH:</div>
+                      {summary?.overallAssessment || "Nề nếp toàn trường duy trì tốt. Phong trào thi đua học tốt được giữ vững qua các tuần."}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* BẢNG XẾP HẠNG CHI TIẾT TỪNG LỚP THEO MỐC THỜI GIAN */}
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center space-x-2">
@@ -1139,18 +1465,20 @@ export function GradeAdminModal({
                       🏆 Bảng Xếp Hạng Thi Đua {grade === 0 ? "Toàn Trường" : `Khối ${grade}`}
                     </span>
                     <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold">
-                      Tuần {week}
+                      {summary?.periodLabel || `Tuần ${week}`}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-500">
-                    Điểm TB: <strong className="text-blue-700">{summary?.gradeAvgScore || 100} đ</strong>
+                  <div className="text-xs text-slate-500 flex items-center space-x-3">
+                    <span>Tổng số: <strong className="text-slate-800">{summary?.classCount || 0} Lớp</strong></span>
+                    <span>•</span>
+                    <span>Điểm TB: <strong className="text-blue-700">{summary?.periodAvgScore || 100} đ</strong></span>
                   </div>
                 </div>
 
                 {loading ? (
                   <div className="py-12 text-center text-slate-500">
                     <div className="inline-block animate-spin text-2xl mb-2">⏳</div>
-                    <div>Đang tổng hợp điểm thi đua...</div>
+                    <div>Đang tổng hợp điểm thi đua {summary?.periodLabel}...</div>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1162,10 +1490,38 @@ export function GradeAdminModal({
                           <th className="p-3.5">Giáo Viên Chủ Nhiệm</th>
                           <th className="p-3.5 text-center">Phòng</th>
                           <th className="p-3.5 text-center">Sĩ Số</th>
-                          <th className="p-3.5 text-center">Điểm Tuần</th>
-                          <th className="p-3.5 text-center">Thưởng (+)</th>
-                          <th className="p-3.5 text-center">Phạt (-)</th>
-                          <th className="p-3.5 text-center">Chuyên Cần</th>
+                          {period === "year" ? (
+                            <>
+                              <th className="p-3.5 text-center">ĐTB HK1</th>
+                              <th className="p-3.5 text-center">ĐTB HK2</th>
+                              <th className="p-3.5 text-center bg-amber-50 text-amber-900">ĐTB Cả Năm</th>
+                              <th className="p-3.5 text-center">Danh Hiệu Trao Tặng</th>
+                            </>
+                          ) : period === "semester2" ? (
+                            <>
+                              <th className="p-3.5 text-center">ĐTB HK1</th>
+                              <th className="p-3.5 text-center bg-indigo-50 text-indigo-900">ĐTB HK2</th>
+                              <th className="p-3.5 text-center">Biến Động</th>
+                              <th className="p-3.5 text-center">Thưởng (+)</th>
+                              <th className="p-3.5 text-center">Phạt (-)</th>
+                              <th className="p-3.5 text-center">Xếp Loại</th>
+                            </>
+                          ) : period === "semester1" ? (
+                            <>
+                              <th className="p-3.5 text-center bg-indigo-50 text-indigo-900">ĐTB HK1</th>
+                              <th className="p-3.5 text-center">Tổng Thưởng</th>
+                              <th className="p-3.5 text-center">Tổng Phạt</th>
+                              <th className="p-3.5 text-center">Xếp Loại HK1</th>
+                            </>
+                          ) : (
+                            <>
+                              <th className="p-3.5 text-center bg-blue-50 text-blue-900">Điểm Tuần</th>
+                              <th className="p-3.5 text-center">Thưởng (+)</th>
+                              <th className="p-3.5 text-center">Phạt (-)</th>
+                              <th className="p-3.5 text-center">Chuyên Cần</th>
+                              <th className="p-3.5 text-center">Xếp Loại</th>
+                            </>
+                          )}
                           <th className="p-3.5 text-center">Thao Tác</th>
                         </tr>
                       </thead>
@@ -1226,23 +1582,105 @@ export function GradeAdminModal({
                                 {c.studentCount}
                               </td>
 
-                              <td className="p-3.5 text-center">
-                                <span className="inline-block px-2.5 py-1 rounded-lg text-sm font-bold bg-blue-100 text-blue-800">
-                                  {c.avgScore?.toFixed(1) || "100.0"}
-                                </span>
-                              </td>
-
-                              <td className="p-3.5 text-center font-semibold text-emerald-600">
-                                +{c.totalPlus || 0}
-                              </td>
-
-                              <td className="p-3.5 text-center font-semibold text-rose-600">
-                                -{c.totalMinus || 0}
-                              </td>
-
-                              <td className="p-3.5 text-center font-semibold text-indigo-700">
-                                {c.conductRate || 98}%
-                              </td>
+                              {/* CÁC CỘT ĐIỂM SỐ ĐỘNG THEO KỲ */}
+                              {period === "year" ? (
+                                <>
+                                  <td className="p-3.5 text-center text-slate-700 font-semibold">
+                                    {c.semester1Score?.toFixed(1) || "---"}
+                                  </td>
+                                  <td className="p-3.5 text-center text-slate-700 font-semibold">
+                                    {c.semester2Score?.toFixed(1) || "---"}
+                                  </td>
+                                  <td className="p-3.5 text-center">
+                                    <span className="inline-block px-2.5 py-1 rounded-lg text-sm font-black bg-amber-100 text-amber-900 border border-amber-200">
+                                      {c.yearScore?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0"}
+                                    </span>
+                                  </td>
+                                  <td className="p-3.5 text-center">
+                                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
+                                      c.rank === 1
+                                        ? "bg-amber-500 text-white shadow-xs"
+                                        : (c.yearScore ?? 0) >= 97.5
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                        : "bg-blue-100 text-blue-800 border border-blue-300"
+                                    }`}>
+                                      {c.yearTitle || "Tập Thể Lớp Tiên Tiến"}
+                                    </span>
+                                  </td>
+                                </>
+                              ) : period === "semester2" ? (
+                                <>
+                                  <td className="p-3.5 text-center text-slate-600 font-semibold">
+                                    {c.semester1Score?.toFixed(1) || "---"} (Hạng {c.semester1Rank || "---"})
+                                  </td>
+                                  <td className="p-3.5 text-center">
+                                    <span className="inline-block px-2.5 py-1 rounded-lg text-sm font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                                      {c.semester2Score?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0"}
+                                    </span>
+                                  </td>
+                                  <td className="p-3.5 text-center text-xs font-bold">
+                                    {c.progressTrend === "up" ? (
+                                      <span className="text-emerald-600">⬆ Tăng hạng</span>
+                                    ) : c.progressTrend === "down" ? (
+                                      <span className="text-rose-600">⬇ Giảm hạng</span>
+                                    ) : (
+                                      <span className="text-slate-400">⏺ Giữ hạng</span>
+                                    )}
+                                  </td>
+                                  <td className="p-3.5 text-center font-semibold text-emerald-600">
+                                    +{c.totalPlus || 0}
+                                  </td>
+                                  <td className="p-3.5 text-center font-semibold text-rose-600">
+                                    -{c.totalMinus || 0}
+                                  </td>
+                                  <td className="p-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                                      {c.gradeClassification || "Tốt"}
+                                    </span>
+                                  </td>
+                                </>
+                              ) : period === "semester1" ? (
+                                <>
+                                  <td className="p-3.5 text-center">
+                                    <span className="inline-block px-2.5 py-1 rounded-lg text-sm font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                                      {c.semester1Score?.toFixed(1) || c.avgScore?.toFixed(1) || "100.0"}
+                                    </span>
+                                  </td>
+                                  <td className="p-3.5 text-center font-semibold text-emerald-600">
+                                    +{c.totalPlus || 0}
+                                  </td>
+                                  <td className="p-3.5 text-center font-semibold text-rose-600">
+                                    -{c.totalMinus || 0}
+                                  </td>
+                                  <td className="p-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                                      {c.gradeClassification || "Tốt"}
+                                    </span>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="p-3.5 text-center">
+                                    <span className="inline-block px-2.5 py-1 rounded-lg text-sm font-bold bg-blue-100 text-blue-800">
+                                      {c.avgScore?.toFixed(1) || "100.0"}
+                                    </span>
+                                  </td>
+                                  <td className="p-3.5 text-center font-semibold text-emerald-600">
+                                    +{c.totalPlus || 0}
+                                  </td>
+                                  <td className="p-3.5 text-center font-semibold text-rose-600">
+                                    -{c.totalMinus || 0}
+                                  </td>
+                                  <td className="p-3.5 text-center font-semibold text-indigo-700">
+                                    {c.conductRate || 98}%
+                                  </td>
+                                  <td className="p-3.5 text-center">
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                                      {c.gradeClassification || "Tốt"}
+                                    </span>
+                                  </td>
+                                </>
+                              )}
 
                               <td className="p-3.5 text-center">
                                 <div className="flex items-center justify-center space-x-1.5">
@@ -2457,13 +2895,24 @@ export function GradeAdminModal({
                     </p>
                   </div>
 
-                  <button
-                    onClick={handleExportRankingReport}
-                    className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center space-x-2 cursor-pointer"
-                  >
-                    <span>🖨️</span>
-                    <span>In Bảng Xếp Hạng Tuần {week} (Khổ A4)</span>
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={handleExportExcelPeriod}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center space-x-2 cursor-pointer"
+                    >
+                      <span>📥</span>
+                      <span>Xuất File Excel</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportRankingReport}
+                      className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center space-x-2 cursor-pointer"
+                    >
+                      <span>🖨️</span>
+                      <span>In Báo Cáo {summary?.periodLabel || `Tuần ${week}`} (Khổ A4)</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-5 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-2 leading-relaxed">

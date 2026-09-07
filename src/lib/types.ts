@@ -304,6 +304,37 @@ export interface ClassInfo {
   totalPlus?: number;
   totalMinus?: number;
   conductRate?: number;
+
+  // Tổng kết Học kỳ & Cả năm
+  semester1Score?: number; // Điểm TB HK1
+  semester1Rank?: number; // Hạng HK1
+  semester2Score?: number; // Điểm TB HK2
+  semester2Rank?: number; // Hạng HK2
+  yearScore?: number; // Điểm TB Cả Năm
+  yearRank?: number; // Hạng Cả Năm
+  yearTitle?: string; // "Cờ Dẫn Đầu", "Lớp Xuất Sắc", "Lớp Tiên Tiến", "Lớp Đạt Chuẩn"
+  progressTrend?: "up" | "down" | "same"; // Xu hướng HK2 so với HK1
+  gradeClassification?: string; // "Xuất sắc", "Tốt", "Khá", "Đạt", "Cần cố gắng"
+}
+
+export type CompetitionPeriod = "week" | "semester1" | "semester2" | "year";
+
+export interface PeriodCompetitionSummary {
+  period: CompetitionPeriod;
+  periodLabel: string;
+  week?: number;
+  grade: number; // 0: Toàn trường, 6: Khối 6, 7: Khối 7, 8: Khối 8, 9: Khối 9
+  classCount: number;
+  totalStudents: number;
+  periodAvgScore: number;
+  topClass: string;
+  classes: ClassInfo[];
+  commonViolations: { code: string; name: string; count: number; points: number; percent: number }[];
+  topAchievements: { code: string; name: string; count: number; points: number; percent: number }[];
+  conductDistribution: { excellent: number; good: number; fair: number; poor: number };
+  totalPlusEvents: number;
+  totalMinusEvents: number;
+  overallAssessment?: string;
 }
 
 export interface GradeCompetitionSummary {
