@@ -57,7 +57,9 @@ export async function verifySessionToken(token: string): Promise<AuthSession | n
     return {
       email: payload.email as string,
       name: payload.name as string,
-      role: (payload.role as "teacher" | "admin" | "student") || "teacher",
+      role: (payload.role as "teacher" | "admin" | "student" | "bgh" | "leader") || "teacher",
+      classId: payload.classId ? String(payload.classId) : undefined,
+      team: typeof payload.team === "number" ? payload.team : undefined,
       stt: payload.stt ? String(payload.stt) : undefined,
       cccd: payload.cccd ? String(payload.cccd) : undefined,
     };

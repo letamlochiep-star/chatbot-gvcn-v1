@@ -11,6 +11,8 @@ import { SpecialWatchlistModal } from "@/components/SpecialWatchlistModal";
 import { BirthdayCalendarModal } from "@/components/BirthdayCalendarModal";
 import { UpdatedProfilesModal } from "@/components/UpdatedProfilesModal";
 import { ParentDirectoryModal } from "@/components/ParentDirectoryModal";
+import { CompetitionDisciplineModal } from "@/components/CompetitionDisciplineModal";
+import { GradeAdminModal } from "@/components/GradeAdminModal";
 import { getFirebaseDb } from "@/lib/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 
@@ -55,6 +57,9 @@ export default function HomePage() {
   const [showParentDirectoryModal, setShowParentDirectoryModal] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showBirthdayModal, setShowBirthdayModal] = useState(false);
+  const [showCompetitionModal, setShowCompetitionModal] = useState(false);
+  const [showGradeAdminModal, setShowGradeAdminModal] = useState(false);
+  const [currentClassId, setCurrentClassId] = useState("8A6");
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [unreadInboxCount, setUnreadInboxCount] = useState(0);
 
@@ -421,6 +426,7 @@ export default function HomePage() {
         <AttendanceConductModal
           onClose={() => setShowAttendanceModal(false)}
           onOpenStudentProfile={(stt) => handleOpenStudentDetail(stt)}
+          onOpenCompetition={() => setShowCompetitionModal(true)}
         />
       )}
 
@@ -429,6 +435,24 @@ export default function HomePage() {
         <BirthdayCalendarModal
           onClose={() => setShowBirthdayModal(false)}
           onOpenStudentProfile={(stt) => handleOpenStudentDetail(stt)}
+        />
+      )}
+
+      {/* 5. TIỆN ÍCH QUẢN LÝ THI ĐUA & NỀ NẾP (40 TIÊU CHÍ - 4 TỔ) */}
+      {showCompetitionModal && (
+        <CompetitionDisciplineModal
+          onClose={() => setShowCompetitionModal(false)}
+          onOpenStudentProfile={(stt) => handleOpenStudentDetail(stt)}
+        />
+      )}
+
+      {/* 6. GIAI ĐOẠN 2: BẢNG ĐIỀU KHIỂN BGH & THI ĐUA KHỐI 8 */}
+      {showGradeAdminModal && (
+        <GradeAdminModal
+          onClose={() => setShowGradeAdminModal(false)}
+          currentClassId={currentClassId}
+          onSelectClass={(cid) => setCurrentClassId(cid)}
+          onOpenClassCompetition={() => setShowCompetitionModal(true)}
         />
       )}
 
@@ -560,13 +584,52 @@ export default function HomePage() {
               <div className="h-px bg-white/20 my-3" />
 
               <div className="text-[10px] font-bold uppercase tracking-wider text-blue-200 mb-2">
-                TIỆN ÍCH BỔ SỢ
+                HỆ THỐNG THI ĐUA & TIỆN ÍCH
               </div>
+
+              {/* Nút Thi Đua & Nề Nếp 4 Tổ Nổi Bật */}
+              <button
+                type="button"
+                onClick={() => setShowCompetitionModal(true)}
+                className="w-full text-left p-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-amber-950 font-bold rounded-2xl text-xs transition shadow-lg flex items-start gap-2.5 cursor-pointer group mb-2"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white/40 text-amber-950 flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition">
+                  🏆
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-extrabold text-xs leading-tight">
+                    Thi Đua & Nề Nếp 4 Tổ (V2.5)
+                  </div>
+                  <div className="text-[10px] text-amber-900/80 mt-0.5 font-semibold leading-tight">
+                    40 tiêu chí 6 nhóm · Xếp hạng 4 Tổ · AI
+                  </div>
+                </div>
+              </button>
+
+              {/* Nút Quản Trị Trường & Thi Đua (Giai đoạn 3) */}
+              <button
+                type="button"
+                onClick={() => setShowGradeAdminModal(true)}
+                className="w-full text-left p-2.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-bold rounded-2xl text-xs transition shadow-md flex items-start gap-2.5 cursor-pointer group mb-2.5"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition">
+                  🏛️
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-extrabold text-xs leading-tight">
+                    Quản Trị Trường & Thi Đua
+                  </div>
+                  <div className="text-[10px] text-blue-100/80 mt-0.5 font-normal leading-tight">
+                    32 lớp toàn trường · Cloud Sync · Phân quyền
+                  </div>
+                </div>
+              </button>
 
               <div className="grid grid-cols-2 gap-1.5 mb-4">
                 <button
                   onClick={() => setShowAttendanceModal(true)}
                   className="py-2 px-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1 cursor-pointer"
+                  title="Điểm danh chuyên cần và Sổ nề nếp rèn luyện theo 4 Tổ"
                 >
                   <span>📋</span> Điểm danh
                 </button>
@@ -664,7 +727,19 @@ export default function HomePage() {
               {/* Mobile sub actions */}
               <div className="flex items-center justify-between pt-0.5 text-[11px] border-t border-white/20">
                 <span className="text-[10px] text-blue-100">Tiện ích:</span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => setShowGradeAdminModal(true)}
+                    className="px-2 py-0.5 bg-indigo-600 text-white rounded-lg text-[10px] font-bold shadow-sm cursor-pointer flex items-center gap-1"
+                  >
+                    🏛️ Quản Trị Trường
+                  </button>
+                  <button
+                    onClick={() => setShowCompetitionModal(true)}
+                    className="px-2 py-0.5 bg-amber-400 text-amber-950 rounded-lg text-[10px] font-bold shadow-sm cursor-pointer flex items-center gap-1"
+                  >
+                    🏆 Thi đua 4 Tổ
+                  </button>
                   <button
                     onClick={() => setShowAttendanceModal(true)}
                     className="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-medium cursor-pointer"
@@ -745,10 +820,23 @@ export default function HomePage() {
                 </button>
                 <div className="h-4 w-px bg-line shrink-0 mx-1" />
                 <button
-                  onClick={() => setShowAttendanceModal(true)}
-                  className="px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-medium transition flex items-center gap-1 cursor-pointer shrink-0"
+                  onClick={() => setShowGradeAdminModal(true)}
+                  className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
-                  <span>📋</span> Điểm danh
+                  <span>🏛️</span> Quản Trị Trường & Thi Đua
+                </button>
+                <button
+                  onClick={() => setShowCompetitionModal(true)}
+                  className="px-3 py-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-amber-950 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <span>🏆</span> Thi Đua 4 Tổ (40 Tiêu Chí)
+                </button>
+                <button
+                  onClick={() => setShowAttendanceModal(true)}
+                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-xl text-xs font-semibold transition flex items-center gap-1 cursor-pointer shrink-0"
+                  title="Điểm danh chuyên cần và Sổ nề nếp rèn luyện theo 4 Tổ"
+                >
+                  <span>📋</span> Điểm danh & Sổ nề nếp
                 </button>
                 <button
                   onClick={() => setShowBirthdayModal(true)}

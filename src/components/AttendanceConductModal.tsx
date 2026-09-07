@@ -8,10 +8,17 @@ import {
   DailyAttendance,
   ConductLog,
 } from "@/lib/types";
+import {
+  COMPETITION_GROUPS,
+  COMPETITION_CATALOG,
+  CompetitionCatalogItem,
+  getStudentTeam,
+} from "@/lib/competitionCatalog";
 
 interface Props {
   onClose: () => void;
   onOpenStudentProfile?: (stt: string) => void;
+  onOpenCompetition?: () => void;
 }
 
 interface StudentOption {
@@ -22,7 +29,7 @@ interface StudentOption {
   maHocSinh?: string;
 }
 
-export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props) {
+export function AttendanceConductModal({ onClose, onOpenStudentProfile, onOpenCompetition }: Props) {
   const [activeTab, setActiveTab] = useState<"daily" | "weekly" | "conduct">("daily");
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
@@ -43,18 +50,25 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
   const [allAttendanceData, setAllAttendanceData] = useState<Record<string, DailyAttendance>>({});
   const [loadingWeekly, setLoadingWeekly] = useState(false);
 
-  // === State Sổ Nề Nếp ===
+  // === State Sổ Nề Nếp & Rèn Luyện ===
   const [conductLogs, setConductLogs] = useState<ConductLog[]>([]);
   const [conductSummary, setConductSummary] = useState<
     Record<string, { totalPoints: number; praiseCount: number; violationCount: number }>
   >({});
-  const [selectedSttForConduct, setSelectedSttForConduct] = useState<string>("");
-  const [conductType, setConductType] = useState<"praise" | "violation">("praise");
+  const [selectedSttForConduct, setSelectedSttForConduct] = useState<string>("1");
+  const [conductType, setConductType] = useState<"praise" | "violation">("violation");
   const [conductTitle, setConductTitle] = useState("");
-  const [conductPoints, setConductPoints] = useState<number>(5);
+  const [selectedCode, setSelectedCode] = useState<string>("");
+  const [conductPoints, setConductPoints] = useState<number>(2);
   const [conductNote, setConductNote] = useState("");
   const [savingConduct, setSavingConduct] = useState(false);
+  const [conductSuccessMsg, setConductSuccessMsg] = useState("");
   const [conductViewMode, setConductViewMode] = useState<"history" | "summary">("history");
+
+  // Filter theo Tổ và Phân nhóm mẫu nhanh
+  const [conductTeamFilter, setConductTeamFilter] = useState<number>(0); // 0: Tất cả, 1..4
+  const [presetGroupFilter, setPresetGroupFilter] = useState<string>("Tất cả");
+  const [historyTeamFilter, setHistoryTeamFilter] = useState<number>(0);
 
   // 1. Tải toàn bộ danh sách 45 học sinh từ API /api/student/list
   useEffect(() => {
@@ -348,42 +362,39 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
       let trackedDays = 0;
       const notes: string[] = [];
 
-      const dayStatuses = weekDays.map((w) => {
+      weekDays.forEach((w) => {
         const daily = allAttendanceData[w.dateStr];
         const rec = daily?.records?.[s.stt];
-        if (!rec) return "-";
-        trackedDays++;
-        if (rec.note) notes.push(`${w.dayName}: ${rec.note}`);
-        if (rec.status === "present") {
-          presentCount++;
-          return "Có mặt (✓)";
-        } else if (rec.status === "excused") {
-          excusedCount++;
-          return "Có phép (P)";
-        } else if (rec.status === "unexcused") {
-          unexcusedCount++;
-          return "Không phép (KP)";
-        } else if (rec.status === "late") {
-          lateCount++;
-          return "Đi trễ (T)";
+        if (rec) {
+          trackedDays++;
+          if (rec.status === "present") presentCount++;
+          else if (rec.status === "excused") excusedCount++;
+          else if (rec.status === "unexcused") unexcusedCount++;
+          else if (rec.status === "late") lateCount++;
+          if (rec.note) notes.push(`${w.shortLabel}: ${rec.note}`);
         }
-        return "-";
       });
 
-      const attendanceRate =
-        trackedDays > 0 ? `${Math.round(((presentCount + lateCount) / trackedDays) * 100)}%` : "—";
-
+      const rate = trackedDays > 0 ? `${Math.round(((presentCount + lateCount) / trackedDays) * 100)}%` : "—";
       const row = [
         s.stt,
         s.hoVaTen,
-        s.gioiTinh || "",
-        s.ngaySinh || "",
-        ...dayStatuses,
+        s.gioiTinh,
+        s.ngaySinh,
+        ...weekDays.map((w) => {
+          const rec = allAttendanceData[w.dateStr]?.records?.[s.stt];
+          if (!rec) return "—";
+          if (rec.status === "present") return "✓";
+          if (rec.status === "excused") return "P";
+          if (rec.status === "unexcused") return "KP";
+          if (rec.status === "late") return "T";
+          return "—";
+        }),
         presentCount,
         excusedCount,
         unexcusedCount,
         lateCount,
-        attendanceRate,
+        rate,
         notes.join("; "),
       ];
 
@@ -408,43 +419,74 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
     window.print();
   };
 
-  // Áp dụng mẫu nhanh nề nếp
-  const applyConductPreset = (
-    type: "praise" | "violation",
-    title: string,
-    points: number
-  ) => {
-    setConductType(type);
-    setConductTitle(title);
-    setConductPoints(points);
+  // Áp dụng một mục trong 40 tiêu chí nề nếp thi đua quy chuẩn
+  const applyCompetitionItem = (item: CompetitionCatalogItem) => {
+    setSelectedCode(item.code);
+    if (item.plus > 0) {
+      setConductType("praise");
+      setConductPoints(item.plus);
+      setConductTitle(`[${item.code}] ${item.description}`);
+    } else {
+      setConductType("violation");
+      setConductPoints(item.minus);
+      setConductTitle(`[${item.code}] ${item.description}`);
+    }
   };
 
-  // Lưu ghi nhận nề nếp
+  // Lưu ghi nhận nề nếp (đồng bộ sang cả /api/conduct và /api/competition)
   const handleSaveConduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSttForConduct || !conductTitle.trim()) return;
 
     setSavingConduct(true);
+    setConductSuccessMsg("");
     const student = students.find((s) => s.stt === selectedSttForConduct);
+    const studentName = student?.hoVaTen || "Học sinh";
+    const team = getStudentTeam(selectedSttForConduct);
+
+    const calculatedPoints =
+      conductType === "violation" ? -Math.abs(conductPoints) : Math.abs(conductPoints);
 
     try {
-      const res = await fetch("/api/conduct", {
+      // 1. Ghi vào ConductLog
+      const resConduct = await fetch("/api/conduct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           stt: selectedSttForConduct,
-          studentName: student?.hoVaTen || "Học sinh",
+          studentName,
           type: conductType,
           title: conductTitle,
-          points: conductType === "violation" ? -Math.abs(conductPoints) : Math.abs(conductPoints),
+          points: calculatedPoints,
           note: conductNote,
           date: selectedDate,
         }),
       });
 
-      const data = await res.json();
-      if (res.ok && data.ok) {
+      // 2. Đồng bộ sang Hệ thống Thi đua 4 Tổ (/api/competition)
+      const numStt = parseInt(selectedSttForConduct, 10);
+      const studentId = `HS${String(isNaN(numStt) ? 1 : numStt).padStart(3, "0")}`;
+      await fetch("/api/competition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "recordEvent",
+          studentId,
+          code: selectedCode || "OTHER",
+          title: conductTitle,
+          points: calculatedPoints,
+          category: conductType === "praise" ? "praise" : "violation",
+          note: conductNote || `Ghi nhận nhanh ngày ${selectedDate}`,
+          team,
+        }),
+      }).catch(() => {});
+
+      const data = await resConduct.json();
+      if (resConduct.ok && data.ok) {
+        setConductSuccessMsg(`✓ Đã ghi nhận nề nếp cho ${studentName} (Tổ ${team})!`);
+        setTimeout(() => setConductSuccessMsg(""), 3500);
         setConductTitle("");
+        setSelectedCode("");
         setConductNote("");
         loadConductData();
       } else {
@@ -476,12 +518,49 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
   const lateCount = Object.values(attendanceRecords).filter((r) => r.status === "late").length;
   const totalStudents = students.length || 45;
 
-  // Lọc học sinh theo từ khóa
+  // Lọc học sinh theo từ khóa cho tab Điểm danh
   const filteredStudents = students.filter(
     (s) =>
       s.hoVaTen.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.stt.includes(searchTerm)
   );
+
+  // Phân chia danh sách học sinh theo 4 Tổ
+  const studentsByTeam = useMemo(() => {
+    const teams: Record<number, StudentRecord[]> = { 1: [], 2: [], 3: [], 4: [] };
+    students.forEach((s) => {
+      const t = getStudentTeam(s.stt);
+      if (teams[t]) teams[t].push(s);
+    });
+    return teams;
+  }, [students]);
+
+  // Học sinh hiển thị trong bộ chọn nhanh nề nếp theo Tổ đang lọc
+  const visibleStudentsForConduct = useMemo(() => {
+    if (conductTeamFilter === 0) return students;
+    return studentsByTeam[conductTeamFilter] || [];
+  }, [conductTeamFilter, students, studentsByTeam]);
+
+  // Danh mục 40 tiêu chí nề nếp lọc theo nhóm A..F
+  const filteredCatalog = useMemo(() => {
+    if (presetGroupFilter === "Tất cả") return COMPETITION_CATALOG;
+    return COMPETITION_CATALOG.filter((item) => item.group === presetGroupFilter);
+  }, [presetGroupFilter]);
+
+  // Học sinh đang được chọn trong form nề nếp
+  const currentSelectedStudent = useMemo(() => {
+    return students.find((s) => s.stt === selectedSttForConduct);
+  }, [students, selectedSttForConduct]);
+
+  const currentSelectedStudentTeam = useMemo(() => {
+    return selectedSttForConduct ? getStudentTeam(selectedSttForConduct) : 1;
+  }, [selectedSttForConduct]);
+
+  // Lọc lịch sử nề nếp theo tổ
+  const filteredConductLogs = useMemo(() => {
+    if (historyTeamFilter === 0) return conductLogs;
+    return conductLogs.filter((log) => getStudentTeam(log.stt) === historyTeamFilter);
+  }, [conductLogs, historyTeamFilter]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/45 backdrop-blur-sm animate-fadeIn">
@@ -497,7 +576,7 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
                 Quản Lý Điểm Danh & Nề Nếp Lớp 8A6 (Sĩ số: {totalStudents} học sinh)
               </h2>
               <p className="text-[11px] text-brandText-muted truncate hidden sm:block">
-                Theo dõi chuyên cần từng ngày, tổng hợp xuất báo cáo tuần và sổ rèn luyện nề nếp
+                Theo dõi chuyên cần từng ngày, tổng hợp xuất báo cáo tuần và sổ rèn luyện nề nếp theo 4 Tổ
               </p>
             </div>
           </div>
@@ -542,7 +621,7 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
                 : "bg-gray-100 text-brandText-muted hover:bg-gray-200"
             }`}
           >
-            <span>🌟</span> 3. Sổ Nề Nếp & Rèn Luyện
+            <span>🌟</span> 3. Sổ Nề Nếp & Rèn Luyện (4 Tổ)
           </button>
         </div>
 
@@ -616,12 +695,13 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
                     stt: s.stt,
                     status: "present",
                   };
+                  const team = getStudentTeam(s.stt);
                   return (
                     <div
                       key={s.stt}
                       className="p-2 sm:p-2.5 bg-[#fbfdff] border border-[#dce9f2] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs hover:border-[#b7d5eb] transition"
                     >
-                      <div className="flex items-center gap-2 min-w-[200px]">
+                      <div className="flex items-center gap-2 min-w-[220px]">
                         <span className="w-6 h-6 bg-primary-soft text-primary font-bold rounded-lg flex items-center justify-center text-[10px] shrink-0">
                           {s.stt}
                         </span>
@@ -634,8 +714,11 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
                           >
                             {s.hoVaTen}
                           </button>
-                          <div className="text-[10px] text-brandText-muted">
-                            Sinh: {s.ngaySinh || "—"} · GT: {s.gioiTinh || "—"}
+                          <div className="text-[10px] text-brandText-muted flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.2 bg-teal-50 text-teal-800 rounded font-semibold border border-teal-200">
+                              Tổ {team}
+                            </span>
+                            <span>Sinh: {s.ngaySinh || "—"}</span>
                           </div>
                         </div>
                       </div>
@@ -857,7 +940,7 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
                             {trackedDays > 0 ? (
                               <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                                 (presentCount + lateCount) === trackedDays
-                                  ? "bg-emerald-100 text-emerald-800"
+                                   ? "bg-emerald-100 text-emerald-800"
                                   : "bg-amber-100 text-amber-800"
                               }`}>
                                 {Math.round(((presentCount + lateCount) / trackedDays) * 100)}%
@@ -876,105 +959,257 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
           </div>
         )}
 
-        {/* TAB 3: SỔ NỀ NẾP & RÈN LUYỆN */}
+        {/* TAB 3: SỔ NỀ NẾP & RÈN LUYỆN (THEO 4 TỔ & 40 TIÊU CHÍ) */}
         {activeTab === "conduct" && (
           <div className="flex-1 flex flex-col overflow-hidden space-y-3">
-            {/* Form Ghi nhận nề nếp nhanh */}
+            {/* Banner chuyển sang Hệ Thống Thi Đua Chuyên Sâu 4 Tổ */}
+            {onOpenCompetition && (
+              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-teal-200 rounded-2xl p-2.5 sm:p-3 flex items-center justify-between gap-2 shrink-0 shadow-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xl shrink-0">🏆</span>
+                  <div className="min-w-0">
+                    <div className="font-extrabold text-xs text-teal-950">
+                      Hệ Thống Thi Đua 4 Tổ & 40 Tiêu Chí Quy Chuẩn (6 Nhóm A..F)
+                    </div>
+                    <div className="text-[10px] text-teal-800">
+                      Theo dõi xếp hạng 4 Tổ, bảng điểm tuần /100đ, Chatbot AI và quản lý 4 Tổ trưởng.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenCompetition();
+                  }}
+                  className="px-3.5 py-1.5 bg-[#0d6e64] hover:bg-[#149d8f] text-white font-bold rounded-xl text-xs transition shadow-sm shrink-0 cursor-pointer flex items-center gap-1"
+                >
+                  <span>Mở Hệ Thống 4 Tổ</span> ➜
+                </button>
+              </div>
+            )}
+
+            {/* FORM GHI NHẬN NỀ NẾP NHANH THEO TỔ & 40 TIÊU CHÍ */}
             <form
               onSubmit={handleSaveConduct}
-              className="bg-[#fcfdff] border border-[#d6e7f4] rounded-2xl p-3 sm:p-4 space-y-2.5 shrink-0"
+              className="bg-[#fcfdff] border border-[#d6e7f4] rounded-2xl p-3 sm:p-3.5 space-y-2.5 shrink-0 shadow-sm"
             >
-              <div className="text-xs font-bold text-[#0d6e64] uppercase flex items-center gap-1.5">
-                <span>✍️</span> Ghi Nhận Nề Nếp & Điểm Rèn Luyện
+              {/* Header của form */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-xs font-bold text-[#0d6e64] uppercase flex items-center gap-1.5">
+                  <span>✍️</span> Ghi Nhận Nề Nếp & Điểm Rèn Luyện (Chi Tiết Theo 4 Tổ)
+                </div>
+                {conductSuccessMsg && (
+                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg animate-fadeIn">
+                    {conductSuccessMsg}
+                  </span>
+                )}
               </div>
 
-              {/* Mẫu nhanh */}
-              <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
-                <span className="font-bold text-brandText-muted">Mẫu nhanh:</span>
-                <button
-                  type="button"
-                  onClick={() => applyConductPreset("praise", "Phát biểu hăng hái", 5)}
-                  className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium border border-emerald-200 cursor-pointer"
-                >
-                  +5đ Phát biểu
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyConductPreset("praise", "Làm việc tốt / Giúp bạn", 5)}
-                  className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium border border-emerald-200 cursor-pointer"
-                >
-                  +5đ Việc tốt
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyConductPreset("praise", "Thành tích xuất sắc / Phong trào", 10)}
-                  className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium border border-emerald-200 cursor-pointer"
-                >
-                  +10đ Phong trào
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyConductPreset("violation", "Quên bài tập / Chưa chuẩn bị bài", 2)}
-                  className="px-2 py-0.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg font-medium border border-rose-200 cursor-pointer"
-                >
-                  -2đ Quên bài
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyConductPreset("violation", "Không mặc đúng đồng phục", 2)}
-                  className="px-2 py-0.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg font-medium border border-rose-200 cursor-pointer"
-                >
-                  -2đ Đồng phục
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyConductPreset("violation", "Nói chuyện riêng / Làm mất trật tự", 3)}
-                  className="px-2 py-0.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg font-medium border border-rose-200 cursor-pointer"
-                >
-                  -3đ Mất trật tự
-                </button>
+              {/* BƯỚC 1: CHỌN TỔ VÀ CHỌN HỌC SINH CHI TIẾT */}
+              <div className="bg-white border border-[#dcebf5] rounded-xl p-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                    <span className="text-primary">1. Chọn Tổ & Học sinh:</span>
+                  </div>
+
+                  {/* Filter chips theo 4 Tổ */}
+                  <div className="flex items-center gap-1 flex-wrap text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setConductTeamFilter(0)}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                        conductTeamFilter === 0
+                          ? "bg-[#0d6e64] text-white shadow-sm"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Tất cả (45 HS)
+                    </button>
+                    {[1, 2, 3, 4].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setConductTeamFilter(t)}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                          conductTeamFilter === t
+                            ? "bg-teal-700 text-white shadow-sm"
+                            : "bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200"
+                        }`}
+                      >
+                        Tổ {t} ({studentsByTeam[t]?.length || 0} HS)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Khung cuộn chọn nhanh từng học sinh theo thẻ */}
+                <div className="max-h-28 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 p-1 bg-[#f8fbfe] border border-line-subtle rounded-xl">
+                  {visibleStudentsForConduct.map((s) => {
+                    const isSelected = selectedSttForConduct === s.stt;
+                    const team = getStudentTeam(s.stt);
+                    const sum = conductSummary[s.stt];
+                    const pts = sum ? sum.totalPoints : 100;
+                    return (
+                      <button
+                        key={s.stt}
+                        type="button"
+                        onClick={() => setSelectedSttForConduct(s.stt)}
+                        className={`p-1.5 rounded-lg border text-left flex items-center justify-between gap-1.5 transition cursor-pointer text-xs ${
+                          isSelected
+                            ? "bg-emerald-500 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-300 font-bold"
+                            : "bg-white text-gray-800 border-gray-200 hover:border-teal-400 hover:bg-teal-50/40"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                              isSelected
+                                ? "bg-white text-emerald-700"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {s.stt}
+                          </span>
+                          <div className="truncate text-[11px] leading-tight font-medium">
+                            {s.hoVaTen}
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[9px] px-1 py-0.2 rounded shrink-0 font-bold ${
+                            isSelected
+                              ? "bg-emerald-700 text-emerald-100"
+                              : "bg-teal-100 text-teal-800"
+                          }`}
+                        >
+                          T{team} · {pts}đ
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Input hàng nề nếp */}
-              <div className="grid grid-cols-1 sm:grid-cols-[160px_100px_1fr_80px_auto] gap-2 items-center text-xs">
-                {/* Chọn học sinh (45 em) */}
+              {/* BƯỚC 2: CHỌN MẪU NHANH TRONG 40 TIÊU CHÍ (6 NHÓM A..F) */}
+              <div className="bg-white border border-[#dcebf5] rounded-xl p-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                    <span className="text-primary">2. Chọn Mẫu Nhanh (40 Tiêu Chí 6 Nhóm):</span>
+                  </div>
+
+                  {/* Filter chips 6 nhóm tiêu chí */}
+                  <div className="flex items-center gap-1 flex-wrap text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setPresetGroupFilter("Tất cả")}
+                      className={`px-2 py-0.5 rounded-lg font-bold transition cursor-pointer ${
+                        presetGroupFilter === "Tất cả"
+                          ? "bg-primary text-white shadow-sm"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      Tất cả ({COMPETITION_CATALOG.length})
+                    </button>
+                    {COMPETITION_GROUPS.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setPresetGroupFilter(g)}
+                        className={`px-2 py-0.5 rounded-lg font-bold transition cursor-pointer ${
+                          presetGroupFilter === g
+                            ? "bg-[#0d6e64] text-white shadow-sm"
+                            : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Danh sách các chip mẫu nhanh 40 tiêu chí */}
+                <div className="max-h-32 overflow-y-auto flex flex-wrap gap-1.5 p-1.5 bg-[#f8fbfe] border border-line-subtle rounded-xl">
+                  {filteredCatalog.map((item) => {
+                    const isPlus = item.plus > 0;
+                    const isSelected = selectedCode === item.code;
+                    return (
+                      <button
+                        key={item.code}
+                        type="button"
+                        onClick={() => applyCompetitionItem(item)}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-medium border flex items-center gap-1.5 transition cursor-pointer ${
+                          isSelected
+                            ? "ring-2 ring-primary border-primary bg-primary-soft text-primary font-bold shadow-sm"
+                            : isPlus
+                            ? "bg-emerald-50/80 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                            : "bg-rose-50/80 text-rose-800 border-rose-200 hover:bg-rose-100"
+                        }`}
+                      >
+                        <span
+                          className={`font-black text-[10px] px-1 py-0.2 rounded ${
+                            isPlus
+                              ? "bg-emerald-600 text-white"
+                              : "bg-rose-600 text-white"
+                          }`}
+                        >
+                          {isPlus ? `+${item.plus}đ` : `-${item.minus}đ`}
+                        </span>
+                        <span className="font-bold text-[10px] text-gray-600">[{item.code}]</span>
+                        <span className="truncate max-w-[200px] sm:max-w-xs">{item.description}</span>
+                        {item.serious && <span title="Lỗi nghiêm trọng">⚠️</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* BƯỚC 3: XÁC NHẬN NỘI DUNG, ĐIỂM SỐ & NÚT GHI NHẬN */}
+              <div className="grid grid-cols-1 sm:grid-cols-[180px_100px_1fr_90px_auto] gap-2 items-center text-xs pt-1">
+                {/* Học sinh đang chọn (Hiển thị Tổ và dropdown) */}
                 <select
                   value={selectedSttForConduct}
                   onChange={(e) => setSelectedSttForConduct(e.target.value)}
-                  className="h-9 px-2 bg-white border border-[#c9deed] rounded-xl font-bold text-primary outline-none focus:border-primary"
+                  className="h-9 px-2 bg-white border border-[#c9deed] rounded-xl font-bold text-primary outline-none focus:border-primary cursor-pointer"
                 >
-                  {students.map((s) => (
-                    <option key={s.stt} value={s.stt}>
-                      {s.stt}. {s.hoVaTen}
-                    </option>
+                  {[1, 2, 3, 4].map((teamNum) => (
+                    <optgroup key={teamNum} label={`--- Tổ ${teamNum} (${studentsByTeam[teamNum]?.length || 0} HS) ---`}>
+                      {studentsByTeam[teamNum]?.map((s) => (
+                        <option key={s.stt} value={s.stt}>
+                          Tổ {teamNum} · {s.stt}. {s.hoVaTen}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
 
                 {/* Loại (Khen / Vi phạm) */}
                 <select
                   value={conductType}
-                  onChange={(e) => setConductType(e.target.value as any)}
-                  className={`h-9 px-2 font-bold rounded-xl outline-none border ${
+                  onChange={(e) => {
+                    const newType = e.target.value as "praise" | "violation";
+                    setConductType(newType);
+                  }}
+                  className={`h-9 px-2 font-bold rounded-xl outline-none border cursor-pointer ${
                     conductType === "praise"
                       ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                       : "bg-rose-50 text-rose-800 border-rose-300"
                   }`}
                 >
-                  <option value="praise">🌟 Tuyên dương</option>
-                  <option value="violation">⚠️ Vi phạm</option>
+                  <option value="praise">🌟 Khen (+)</option>
+                  <option value="violation">⚠️ Vi phạm (-)</option>
                 </select>
 
-                {/* Nội dung */}
+                {/* Nội dung tiêu chí */}
                 <input
                   type="text"
-                  placeholder="Nhập nội dung nề nếp..."
+                  placeholder="Nhập nội dung hoặc click chọn Mẫu Nhanh phía trên..."
                   value={conductTitle}
                   onChange={(e) => setConductTitle(e.target.value)}
-                  className="h-9 px-3 border border-[#c9deed] rounded-xl outline-none focus:border-primary bg-white"
+                  className="h-9 px-3 border border-[#c9deed] rounded-xl outline-none focus:border-primary bg-white font-medium"
                   required
                 />
 
-                {/* Điểm */}
+                {/* Điểm số */}
                 <div className="flex items-center gap-1">
                   <span className="font-bold text-gray-500">Điểm:</span>
                   <input
@@ -983,140 +1218,215 @@ export function AttendanceConductModal({ onClose, onOpenStudentProfile }: Props)
                     max="50"
                     value={conductPoints}
                     onChange={(e) => setConductPoints(parseInt(e.target.value, 10) || 1)}
-                    className="h-9 w-14 px-1.5 text-center font-bold border border-[#c9deed] rounded-xl outline-none focus:border-primary bg-white"
+                    className="h-9 w-14 px-1 text-center font-black border border-[#c9deed] rounded-xl outline-none focus:border-primary bg-white"
                   />
                 </div>
 
-                {/* Nút thêm */}
+                {/* Nút thêm ghi nhận */}
                 <button
                   type="submit"
                   disabled={savingConduct || !conductTitle.trim()}
-                  className="h-9 px-4 bg-[#0d6e64] hover:bg-[#149d8f] text-white font-bold rounded-xl transition cursor-pointer disabled:opacity-50 shrink-0"
+                  className="h-9 px-4 bg-[#0d6e64] hover:bg-[#149d8f] text-white font-bold rounded-xl transition cursor-pointer disabled:opacity-50 shrink-0 shadow-sm flex items-center gap-1"
                 >
                   {savingConduct ? "Đang lưu..." : "+ Ghi Nhận"}
                 </button>
               </div>
+
+              {/* Thông tin học sinh đang chọn tóm tắt */}
+              {currentSelectedStudent && (
+                <div className="text-[11px] text-gray-500 flex items-center gap-2 pt-0.5">
+                  <span>
+                    Đang chọn: <strong>{currentSelectedStudent.hoVaTen}</strong> (STT {currentSelectedStudent.stt})
+                  </span>
+                  <span className="px-1.5 py-0.2 bg-teal-100 text-teal-800 font-bold rounded">
+                    Tổ {currentSelectedStudentTeam}
+                  </span>
+                  <span>
+                    Điểm nề nếp hiện tại:{" "}
+                    <strong>{conductSummary[currentSelectedStudent.stt]?.totalPoints ?? 100}đ</strong>
+                  </span>
+                </div>
+              )}
             </form>
 
-            {/* Chuyển chế độ xem Lịch sử / Tổng kết */}
-            <div className="flex items-center justify-between gap-2 shrink-0">
+            {/* CHUYỂN CHẾ ĐỘ XEM LỊCH SỬ / BẢNG TỔNG KẾT THEO 4 TỔ */}
+            <div className="flex items-center justify-between gap-2 shrink-0 flex-wrap">
               <div className="flex gap-1.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setConductViewMode("history")}
                   className={`px-3 py-1 rounded-xl font-bold transition cursor-pointer ${
                     conductViewMode === "history"
-                      ? "bg-primary text-white shadow-sm"
+                      ? "bg-[#0d6e64] text-white shadow-sm"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  🕒 Lịch sử ghi nhận ({conductLogs.length})
+                  🕒 Lịch sử ghi nhận ({filteredConductLogs.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setConductViewMode("summary")}
                   className={`px-3 py-1 rounded-xl font-bold transition cursor-pointer ${
                     conductViewMode === "summary"
-                      ? "bg-primary text-white shadow-sm"
+                      ? "bg-[#0d6e64] text-white shadow-sm"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  📊 Bảng tổng kết điểm 45 học sinh
+                  📊 Bảng tổng kết điểm 45 học sinh (Theo 4 Tổ)
                 </button>
               </div>
+
+              {conductViewMode === "history" && (
+                <div className="flex items-center gap-1 text-[11px]">
+                  <span className="font-bold text-gray-500">Lọc Tổ:</span>
+                  <select
+                    value={historyTeamFilter}
+                    onChange={(e) => setHistoryTeamFilter(parseInt(e.target.value, 10))}
+                    className="px-2 py-0.5 bg-white border border-[#c9deed] rounded-lg text-xs font-bold text-teal-900 outline-none"
+                  >
+                    <option value={0}>Tất cả 4 Tổ</option>
+                    <option value={1}>Tổ 1</option>
+                    <option value={2}>Tổ 2</option>
+                    <option value={3}>Tổ 3</option>
+                    <option value={4}>Tổ 4</option>
+                  </select>
+                </div>
+              )}
             </div>
 
-            {/* Danh sách nề nếp */}
+            {/* DANH SÁCH LỊCH SỬ HOẶC BẢNG TỔNG KẾT */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
               {conductViewMode === "history" ? (
-                conductLogs.length === 0 ? (
+                filteredConductLogs.length === 0 ? (
                   <div className="text-center py-10 text-xs text-brandText-muted bg-gray-50 rounded-2xl">
-                    Chưa có bản ghi nề nếp nào.
+                    Chưa có bản ghi nề nếp nào phù hợp.
                   </div>
                 ) : (
-                  conductLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs transition ${
-                        log.type === "praise"
-                          ? "bg-emerald-50/60 border-emerald-200"
-                          : "bg-rose-50/60 border-rose-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-6 h-6 rounded-lg bg-white border flex items-center justify-center font-bold text-gray-700 text-[10px] shrink-0">
-                          {log.stt}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="font-bold text-gray-900 truncate">
-                            {log.studentName} —{" "}
-                            <span className={log.type === "praise" ? "text-emerald-700" : "text-rose-700"}>
-                              {log.title}
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-gray-500">
-                            Ngày: {log.date} {log.note ? `· ${log.note}` : ""}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span
-                          className={`font-black text-xs px-2 py-0.5 rounded-md ${
-                            log.type === "praise"
-                              ? "bg-emerald-600 text-white"
-                              : "bg-rose-600 text-white"
-                          }`}
-                        >
-                          {log.points > 0 ? `+${log.points}` : log.points}đ
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteConduct(log.id)}
-                          className="text-gray-400 hover:text-rose-600 p-1 transition cursor-pointer"
-                          title="Xóa"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )
-              ) : (
-                /* Bảng tổng kết điểm nề nếp của 45 học sinh */
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                  {students.map((s) => {
-                    const sum = conductSummary[s.stt] || {
-                      totalPoints: 100,
-                      praiseCount: 0,
-                      violationCount: 0,
-                    };
+                  filteredConductLogs.map((log) => {
+                    const team = getStudentTeam(log.stt);
                     return (
                       <div
-                        key={s.stt}
-                        className="p-2.5 bg-white border border-line rounded-xl flex items-center justify-between text-xs hover:border-primary transition"
+                        key={log.id}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs transition ${
+                          log.type === "praise"
+                            ? "bg-emerald-50/60 border-emerald-200"
+                            : "bg-rose-50/60 border-rose-200"
+                        }`}
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="w-5 h-5 bg-gray-100 rounded text-gray-600 text-[10px] font-bold flex items-center justify-center shrink-0">
-                            {s.stt}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-6 h-6 rounded-lg bg-white border flex items-center justify-center font-bold text-gray-700 text-[10px] shrink-0 shadow-2xs">
+                            {log.stt}
                           </span>
-                          <span className="font-bold text-gray-800 truncate">{s.hoVaTen}</span>
+                          <div className="min-w-0">
+                            <div className="font-bold text-gray-900 truncate flex items-center gap-1.5">
+                              <span>{log.studentName}</span>
+                              <span className="px-1.5 py-0.2 bg-teal-100 text-teal-800 rounded font-semibold text-[10px]">
+                                Tổ {team}
+                              </span>
+                              <span>—</span>
+                              <span className={log.type === "praise" ? "text-emerald-700" : "text-rose-700"}>
+                                {log.title}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-gray-500">
+                              Ngày: {log.date} {log.note ? `· ${log.note}` : ""}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[10px] text-emerald-700">+{sum.praiseCount}</span>
-                          <span className="text-[10px] text-rose-700">-{sum.violationCount}</span>
+
+                        <div className="flex items-center gap-2 shrink-0">
                           <span
-                            className={`font-black text-xs px-2 py-0.5 rounded ${
-                              sum.totalPoints >= 100
-                                ? "bg-emerald-100 text-emerald-900"
-                                : sum.totalPoints >= 80
-                                ? "bg-blue-100 text-blue-900"
-                                : "bg-rose-100 text-rose-900"
+                            className={`font-black text-xs px-2 py-0.5 rounded-md ${
+                              log.type === "praise"
+                                ? "bg-emerald-600 text-white"
+                                : "bg-rose-600 text-white"
                             }`}
                           >
-                            {sum.totalPoints}đ
+                            {log.points > 0 ? `+${log.points}` : log.points}đ
                           </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteConduct(log.id)}
+                            className="text-gray-400 hover:text-rose-600 p-1 transition cursor-pointer"
+                            title="Xóa"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )
+              ) : (
+                /* BẢNG TỔNG KẾT THEO 4 TỔ */
+                <div className="space-y-4">
+                  {[1, 2, 3, 4].map((teamNum) => {
+                    const teamStudents = studentsByTeam[teamNum] || [];
+                    const avgScore =
+                      teamStudents.length > 0
+                        ? Math.round(
+                            (teamStudents.reduce((acc, s) => {
+                              return acc + (conductSummary[s.stt]?.totalPoints ?? 100);
+                            }, 0) /
+                              teamStudents.length) *
+                              10
+                          ) / 10
+                        : 100;
+
+                    return (
+                      <div key={teamNum} className="bg-white border border-[#dce9f2] rounded-2xl p-3 space-y-2 shadow-2xs">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 bg-teal-700 text-white text-xs font-bold rounded-lg">
+                              Tổ {teamNum}
+                            </span>
+                            <span className="text-xs text-gray-600 font-semibold">
+                              Sĩ số: <strong>{teamStudents.length} học sinh</strong>
+                            </span>
+                          </div>
+                          <div className="text-xs font-bold text-[#0d6e64]">
+                            Điểm TB nề nếp Tổ: <span className="text-sm font-black text-teal-800">{avgScore}đ</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                          {teamStudents.map((s) => {
+                            const sum = conductSummary[s.stt] || {
+                              totalPoints: 100,
+                              praiseCount: 0,
+                              violationCount: 0,
+                            };
+                            return (
+                              <div
+                                key={s.stt}
+                                onClick={() => setSelectedSttForConduct(s.stt)}
+                                className="p-2 bg-[#fcfdfe] border border-[#e4edf5] rounded-xl flex items-center justify-between text-xs hover:border-teal-500 hover:shadow-2xs transition cursor-pointer"
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-5 h-5 bg-teal-50 border border-teal-200 text-teal-900 rounded text-[10px] font-bold flex items-center justify-center shrink-0">
+                                    {s.stt}
+                                  </span>
+                                  <span className="font-bold text-gray-800 truncate">{s.hoVaTen}</span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span className="text-[10px] text-emerald-700 font-semibold">+{sum.praiseCount}</span>
+                                  <span className="text-[10px] text-rose-700 font-semibold">-{sum.violationCount}</span>
+                                  <span
+                                    className={`font-black text-[11px] px-1.5 py-0.5 rounded ${
+                                      sum.totalPoints >= 100
+                                        ? "bg-emerald-100 text-emerald-900"
+                                        : sum.totalPoints >= 85
+                                        ? "bg-blue-100 text-blue-900"
+                                        : "bg-rose-100 text-rose-900"
+                                    }`}
+                                  >
+                                    {sum.totalPoints}đ
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     );

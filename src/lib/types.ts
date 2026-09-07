@@ -118,7 +118,9 @@ export interface FieldGroup {
 export interface AuthSession {
   email: string;
   name: string;
-  role: "teacher" | "admin" | "student";
+  role: "teacher" | "admin" | "school_admin" | "student" | "bgh" | "leader";
+  classId?: string; // Ví dụ: "8A6", "8A1"
+  team?: number; // Tổ nếu là tổ trưởng
   stt?: string; // Số thứ tự nếu là học sinh
   cccd?: string;
   iat?: number;
@@ -190,3 +192,151 @@ export interface BirthdayItem {
   isThisWeek: boolean;
   isToday: boolean;
 }
+
+// === GIAI ĐOẠN 2: THI ĐUA & NỀ NẾP 8A6 V2.4 (151 MÃ QUY ĐỊNH CHUẨN) ===
+
+export interface CompetitionEvent {
+  eventId: string;
+  studentId: string;
+  studentName: string;
+  team: number;
+  code: string;
+  group: string;
+  description: string;
+  plus: number;
+  minus: number;
+  serious: boolean;
+  eventDate: string; // YYYY-MM-DD
+  period?: string;
+  subject?: string;
+  note?: string;
+  createdByName: string;
+  createdByRole: string;
+  status: "APPROVED" | "CANCELLED" | "PENDING";
+  cancelReason?: string;
+  week: number;
+  createdAt: string;
+}
+
+export interface StudentRankItem {
+  rank: number;
+  studentId: string;
+  fullName: string;
+  team: number;
+  isTeamLeader: boolean;
+  plus: number;
+  minus: number;
+  score: number;
+  grade: string;
+  eventCount: number;
+  week: number;
+}
+
+export interface WeeklyDashboard {
+  week: number;
+  studentCount: number;
+  avgScore: number;
+  totalPlus: number;
+  totalMinus: number;
+  eventCount: number;
+  perfectCount: number;
+  ranking: StudentRankItem[];
+  recentEvents: CompetitionEvent[];
+  teamSummaries?: TeamCompetitionSummary[];
+}
+
+export interface TeamCompetitionSummary {
+  team: number;
+  teamName: string;
+  leaderName: string;
+  leaderStudentId?: string;
+  memberCount: number;
+  avgScore: number;
+  totalPlus: number;
+  totalMinus: number;
+  eventCount: number;
+  perfectCount: number;
+  rank: number;
+  members: StudentRankItem[];
+}
+
+export interface TeamLeaderInfo {
+  team: number;
+  username: string;
+  studentId: string;
+  studentName: string;
+  pin: string;
+  updatedAt?: string;
+}
+
+export interface CompetitionSubmission {
+  submissionId: string;
+  studentId: string;
+  studentName: string;
+  team: number;
+  suggestedCode: string;
+  description: string;
+  plus: number;
+  minus: number;
+  eventDate: string;
+  note?: string;
+  createdByName: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reviewNote?: string;
+  week: number;
+  createdAt: string;
+}
+
+// === GIAI ĐOẠN 2: MỞ RỘNG QUY MÔ KHỐI & BGH TRƯỜNG ===
+
+export interface ClassInfo {
+  classId: string; // "8A1", "8A2", ..., "8A8"
+  className: string; // "Lớp 8A6"
+  grade: number; // 8
+  teacherName: string; // GVCN
+  teacherEmail: string;
+  teacherPhone?: string;
+  studentCount: number;
+  room: string;
+  avgScore?: number;
+  rank?: number;
+  totalPlus?: number;
+  totalMinus?: number;
+  conductRate?: number;
+}
+
+export interface GradeCompetitionSummary {
+  grade: number; // 0: Toàn trường, 6: Khối 6, 7: Khối 7, 8: Khối 8, 9: Khối 9
+  week: number;
+  classCount: number;
+  totalStudents: number;
+  gradeAvgScore: number;
+  topClass: string;
+  classes: ClassInfo[];
+}
+
+// === GIAI ĐOẠN 3: QUẢN TRỊ TRƯỜNG, ĐỒNG BỘ CLOUD FIREBASE & BẢO MẬT MATRIX ===
+
+export interface CloudSyncStatus {
+  connected: boolean;
+  projectId: string;
+  storageBucket: string;
+  lastSyncTime?: string;
+  totalClassesSynced: number;
+  totalEventsSynced: number;
+  totalConductLogsSynced: number;
+  totalStudentsSynced: number;
+  latencyMs?: number;
+  statusText?: string;
+}
+
+export interface SchoolSecurityRole {
+  roleId: "school_admin" | "teacher" | "leader" | "team_leader" | "student";
+  title: string;
+  description: string;
+  scope: string;
+  permissions: string[];
+}
+
+
+

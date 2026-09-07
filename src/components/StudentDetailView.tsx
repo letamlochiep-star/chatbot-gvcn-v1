@@ -11,6 +11,7 @@ import {
 import { groupStudentFields } from "@/lib/schema";
 import { getFirebaseDb } from "@/lib/firebase";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { getStudentTeam } from "@/lib/competitionCatalog";
 
 interface Props {
   student: StudentRecord;
@@ -345,6 +346,9 @@ export function StudentDetailView({
           <div className="text-base sm:text-xl font-bold mt-0.5 truncate">{student.hoVaTen}</div>
           <div className="text-[11px] text-blue-100 mt-1 flex flex-wrap gap-1.5">
             <span className="bg-white/20 px-1.5 py-0.5 rounded">STT: {student.stt}</span>
+            <span className="bg-amber-300 text-amber-950 px-1.5 py-0.5 rounded font-bold">
+              Tổ {getStudentTeam(student.stt)}
+            </span>
             <span className="bg-white/20 px-1.5 py-0.5 rounded">Sinh: {student.ngaySinh}</span>
             <span className="bg-white/20 px-1.5 py-0.5 rounded">GT: {student.gioiTinh}</span>
           </div>
