@@ -126,38 +126,42 @@ export function AuthModal({ onSuccess }: Props) {
           </div>
         )}
 
-        {/* TAB GIÁO VIÊN */}
+        {/* TAB GIÁO VIÊN & QUẢN TRỊ TRƯỜNG */}
         {tab === "teacher" ? (
           <form onSubmit={handleTeacherSubmit} className="space-y-3 text-left">
             <div>
               <label className="block text-xs font-bold text-brandText uppercase mb-1">
-                Tài khoản Email giáo viên
+                Tài khoản Quản Trị / Email Giáo Viên
               </label>
               <input
-                type="email"
+                type="text"
                 value={teacherEmail}
                 onChange={(e) => setTeacherEmail(e.target.value)}
                 required
-                placeholder="Nhập email giáo viên (ví dụ: letambp2003@gmail.com)"
+                placeholder="Nhập 'admin' hoặc email giáo viên"
                 className="w-full h-11 px-3.5 text-sm border border-[#c9deed] rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition bg-[#fbfdff]"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-brandText uppercase mb-1">
-                Mật khẩu giáo viên
+                Mật khẩu / Mã PIN
               </label>
               <input
                 type="password"
                 value={teacherPin}
                 onChange={(e) => setTeacherPin(e.target.value)}
                 required
-                placeholder="Nhập mật khẩu"
+                placeholder="Nhập mật khẩu (Mặc định: Antam2025@)"
                 className="w-full h-11 px-3.5 text-sm border border-[#c9deed] rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition bg-[#fbfdff]"
               />
             </div>
 
-            <div className="pt-2">
+            <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 text-[11px] text-blue-900 leading-tight">
+              🏛️ <strong>Tài khoản Quản Trị Trường</strong>: <code>admin</code> • Mật khẩu: <code>Antam2025@</code>
+            </div>
+
+            <div className="pt-1">
               <button
                 type="submit"
                 disabled={loading || !teacherEmail.trim() || !teacherPin.trim()}
@@ -166,7 +170,7 @@ export function AuthModal({ onSuccess }: Props) {
                 {loading ? (
                   <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                 ) : (
-                  "ĐĂNG NHẬP GIÁO VIÊN"
+                  "ĐĂNG NHẬP HỆ THỐNG"
                 )}
               </button>
             </div>

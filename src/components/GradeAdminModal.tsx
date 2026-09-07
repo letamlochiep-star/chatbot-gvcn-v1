@@ -21,7 +21,7 @@ export function GradeAdminModal({
   >("ranking");
   const [loading, setLoading] = useState(false);
   const [week, setWeek] = useState<number>(1);
-  const [grade, setGrade] = useState<number>(8); // 0: Toàn trường, 6: Khối 6, 7: Khối 7, 8: Khối 8, 9: Khối 9
+  const [grade, setGrade] = useState<number>(0); // 0: Toàn trường, 6: Khối 6, 7: Khối 7, 8: Khối 8, 9: Khối 9
   const [summary, setSummary] = useState<GradeCompetitionSummary | null>(null);
 
   // Inspector state
@@ -36,6 +36,18 @@ export function GradeAdminModal({
   const [savingTeacher, setSavingTeacher] = useState(false);
   const [teacherFilterGrade, setTeacherFilterGrade] = useState<number>(0);
   const [teacherSearch, setTeacherSearch] = useState("");
+
+  // Create Class state
+  const [showAddClassModal, setShowAddClassModal] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+  const [newClassId, setNewClassId] = useState("");
+  const [newClassGrade, setNewClassGrade] = useState<number>(8);
+  const [newClassTeacher, setNewClassTeacher] = useState("");
+  const [newClassPhone, setNewClassPhone] = useState("");
+  const [newClassEmail, setNewClassEmail] = useState("");
+  const [newClassRoom, setNewClassRoom] = useState("");
+  const [newClassStudents, setNewClassStudents] = useState<number>(45);
+  const [addingClass, setAddingClass] = useState(false);
 
   // Cloud Sync state
   const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus | null>(null);
@@ -153,6 +165,82 @@ export function GradeAdminModal({
     }
   };
 
+  // Tạo lớp học mới
+  const handleCreateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClassName.trim()) return;
+
+    const classId = newClassId.trim() || newClassName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+
+    setAddingClass(true);
+    try {
+      const res = await fetch("/api/classes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "addClass",
+          newClass: {
+            classId,
+            className: newClassName.trim().startsWith("Lớp") ? newClassName.trim() : `Lớp ${newClassName.trim()}`,
+            grade: newClassGrade,
+            teacherName: newClassTeacher.trim() || "Chưa phân công",
+            teacherEmail: newClassEmail.trim() || `gvcn.${classId.toLowerCase()}@thcsquangtrung.edu.vn`,
+            teacherPhone: newClassPhone.trim(),
+            room: newClassRoom.trim() || `Phòng ${classId}`,
+            studentCount: newClassStudents || 45,
+          },
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        alert(`✓ Đã tạo lớp ${newClassName} và phân công GVCN thành công!`);
+        setShowAddClassModal(false);
+        setNewClassName("");
+        setNewClassId("");
+        setNewClassTeacher("");
+        setNewClassPhone("");
+        setNewClassEmail("");
+        setNewClassRoom("");
+        fetchGradeSummary(week, grade);
+      } else {
+        alert(data.message || "Không thể tạo lớp học.");
+      }
+    } catch {
+      alert("Lỗi kết nối khi tạo lớp học.");
+    } finally {
+      setAddingClass(false);
+    }
+  };
+
+  // Xóa lớp học
+  const handleDeleteClass = async (c: ClassInfo) => {
+    if (!confirm(`⚠️ Bạn có chắc chắn muốn xóa lớp ${c.className} (Mã: ${c.classId}) khỏi hệ thống?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/classes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deleteClass",
+          classId: c.classId,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        alert(`✓ Đã xóa lớp ${c.className} thành công!`);
+        fetchGradeSummary(week, grade);
+      } else {
+        alert(data.message || "Không thể xóa lớp.");
+      }
+    } catch {
+      alert("Lỗi kết nối máy chủ");
+    }
+  };
+
   // Kích hoạt đồng bộ Cloud Sync Firebase
   const handleTriggerCloudSync = async (action: "upload" | "download" | "test") => {
     setSyncingCloud(true);
@@ -231,10 +319,7 @@ export function GradeAdminModal({
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute(
-      "href",
-      url
-    );
+    link.setAttribute("href", url);
     const scopeLabel = grade === 0 ? "Toan_Truong" : `Khoi_${grade}`;
     link.setAttribute("download", `Bao_Cao_Thi_Dua_${scopeLabel}_Tuan_${week}.csv`);
     document.body.appendChild(link);
@@ -394,11 +479,11 @@ export function GradeAdminModal({
                   Bảng Điều Khiển Quản Trị Trường & Thi Đua
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Giai Đoạn 3 Toàn Diện
+                  Admin Toàn Quyền
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Quản trị 32 lớp học toàn trường (Khối 6, 7, 8, 9) • Đồng bộ Cloud Firebase • Ma trận bảo mật RBAC
+                Quản trị danh mục lớp học & Phân công GVCN • Đồng bộ Cloud Firebase • Ma trận bảo mật RBAC
               </p>
             </div>
           </div>
@@ -423,7 +508,7 @@ export function GradeAdminModal({
             {/* Nút đóng */}
             <button
               onClick={onClose}
-              className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition"
+              className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition cursor-pointer"
               title="Đóng bảng điều khiển"
             >
               ✕
@@ -436,7 +521,7 @@ export function GradeAdminModal({
           <div className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto py-1">
             <button
               onClick={() => setActiveTab("ranking")}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === "ranking"
                   ? "bg-blue-700 text-white shadow-sm"
                   : "text-slate-700 hover:bg-slate-200"
@@ -448,7 +533,7 @@ export function GradeAdminModal({
 
             <button
               onClick={() => setActiveTab("inspect")}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === "inspect"
                   ? "bg-blue-700 text-white shadow-sm"
                   : "text-slate-700 hover:bg-slate-200"
@@ -460,19 +545,19 @@ export function GradeAdminModal({
 
             <button
               onClick={() => setActiveTab("teachers")}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === "teachers"
                   ? "bg-blue-700 text-white shadow-sm"
                   : "text-slate-700 hover:bg-slate-200"
               }`}
             >
               <span>👩‍🏫</span>
-              <span>3. Phân Công GVCN</span>
+              <span>3. Danh Mục Lớp & Phân Công GVCN</span>
             </button>
 
             <button
               onClick={() => setActiveTab("cloud_sync")}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === "cloud_sync"
                   ? "bg-blue-700 text-white shadow-sm"
                   : "text-slate-700 hover:bg-slate-200"
@@ -484,7 +569,7 @@ export function GradeAdminModal({
 
             <button
               onClick={() => setActiveTab("security")}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === "security"
                   ? "bg-blue-700 text-white shadow-sm"
                   : "text-slate-700 hover:bg-slate-200"
@@ -496,7 +581,7 @@ export function GradeAdminModal({
 
             <button
               onClick={() => setActiveTab("export")}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === "export"
                   ? "bg-blue-700 text-white shadow-sm"
                   : "text-slate-700 hover:bg-slate-200"
@@ -511,31 +596,31 @@ export function GradeAdminModal({
           <div className="flex items-center space-x-1 bg-white border border-slate-300 rounded-lg p-0.5 text-xs font-semibold">
             <button
               onClick={() => setGrade(0)}
-              className={`px-2 py-1 rounded ${grade === 0 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`px-2 py-1 rounded cursor-pointer ${grade === 0 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               Toàn Trường
             </button>
             <button
               onClick={() => setGrade(6)}
-              className={`px-2 py-1 rounded ${grade === 6 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`px-2 py-1 rounded cursor-pointer ${grade === 6 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               Khối 6
             </button>
             <button
               onClick={() => setGrade(7)}
-              className={`px-2 py-1 rounded ${grade === 7 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`px-2 py-1 rounded cursor-pointer ${grade === 7 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               Khối 7
             </button>
             <button
               onClick={() => setGrade(8)}
-              className={`px-2 py-1 rounded ${grade === 8 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`px-2 py-1 rounded cursor-pointer ${grade === 8 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               Khối 8
             </button>
             <button
               onClick={() => setGrade(9)}
-              className={`px-2 py-1 rounded ${grade === 9 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`px-2 py-1 rounded cursor-pointer ${grade === 9 ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               Khối 9
             </button>
@@ -608,7 +693,7 @@ export function GradeAdminModal({
                 <div className="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center space-x-2">
                     <span className="text-base font-bold text-slate-800">
-                      🏆 Bảng Xếp Hạng Thi Đua {grade === 0 ? "Toàn Trường (32 Lớp)" : `Khối ${grade}`}
+                      🏆 Bảng Xếp Hạng Thi Đua {grade === 0 ? "Toàn Trường" : `Khối ${grade}`}
                     </span>
                     <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold">
                       Tuần {week}
@@ -723,7 +808,7 @@ export function GradeAdminModal({
                                       setInspectClassId(c.classId);
                                       setActiveTab("inspect");
                                     }}
-                                    className="px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition"
+                                    className="px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition cursor-pointer"
                                   >
                                     🔍 Xem Sổ
                                   </button>
@@ -733,7 +818,7 @@ export function GradeAdminModal({
                                         onSelectClass(c.classId);
                                         onClose();
                                       }}
-                                      className="px-2.5 py-1 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md transition"
+                                      className="px-2.5 py-1 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md transition cursor-pointer"
                                     >
                                       Chọn Lớp
                                     </button>
@@ -763,7 +848,7 @@ export function GradeAdminModal({
                       Thanh Tra & Kiểm Tra Nề Nếp Lớp Học (Dành Cho Quản Trị Trường)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Quản trị trường có thể chọn bất kỳ lớp nào trong 32 lớp để kiểm tra nề nếp, điểm danh và các sự việc đã ghi nhận.
+                      Quản trị trường có thể chọn bất kỳ lớp nào trong danh mục để kiểm tra nề nếp, điểm danh và các sự việc đã ghi nhận.
                     </p>
                   </div>
 
@@ -828,7 +913,7 @@ export function GradeAdminModal({
                               onOpenClassCompetition(inspectedClass.classId);
                               onClose();
                             }}
-                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1.5"
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1.5 cursor-pointer"
                           >
                             <span>📖</span>
                             <span>Mở Sổ Nề Nếp & Chấm Điểm Lớp Này</span>
@@ -841,7 +926,7 @@ export function GradeAdminModal({
                               onSelectClass(inspectedClass.classId);
                               onClose();
                             }}
-                            className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg shadow-sm transition"
+                            className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg shadow-sm transition cursor-pointer"
                           >
                             ✓ Chuyển Sang Lớp Này
                           </button>
@@ -855,33 +940,41 @@ export function GradeAdminModal({
           )}
 
           {/* ========================================================= */}
-          {/* TAB 3: PHÂN CÔNG & QUẢN LÝ GVCN */}
+          {/* TAB 3: TẠO DANH MỤC LỚP HỌC & PHÂN CÔNG GVCN */}
           {/* ========================================================= */}
           {activeTab === "teachers" && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
                   <div>
-                    <h3 className="text-base font-bold text-slate-800">
-                      Danh Bạ & Phân Công Giáo Viên Chủ Nhiệm 32 Lớp Toàn Trường
+                    <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                      <span>👩‍🏫</span> Danh Mục Lớp Học & Phân Công Giáo Viên Chủ Nhiệm
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Quản trị trường có quyền cập nhật phân công, số hotline và phòng học của giáo viên chủ nhiệm.
+                      Quản trị trường tạo danh mục lớp học theo tên lớp, khối và phân công giáo viên chủ nhiệm toàn trường.
                     </p>
                   </div>
 
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 flex-wrap gap-2">
+                    {/* Nút Tạo Lớp Mới */}
+                    <button
+                      onClick={() => setShowAddClassModal(true)}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>➕</span> Tạo Lớp Học Mới
+                    </button>
+
                     {/* Lọc Khối */}
                     <select
                       value={teacherFilterGrade}
                       onChange={(e) => setTeacherFilterGrade(Number(e.target.value))}
-                      className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg outline-none"
+                      className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg outline-none cursor-pointer"
                     >
-                      <option value={0}>Tất Cả Các Khối (32 Lớp)</option>
-                      <option value={6}>Khối 6 (8 Lớp)</option>
-                      <option value={7}>Khối 7 (8 Lớp)</option>
-                      <option value={8}>Khối 8 (8 Lớp)</option>
-                      <option value={9}>Khối 9 (8 Lớp)</option>
+                      <option value={0}>Tất Cả Các Khối</option>
+                      <option value={6}>Khối 6</option>
+                      <option value={7}>Khối 7</option>
+                      <option value={8}>Khối 8</option>
+                      <option value={9}>Khối 9</option>
                     </select>
 
                     {/* Ô Tìm kiếm */}
@@ -890,7 +983,7 @@ export function GradeAdminModal({
                       placeholder="Tìm tên GV, lớp..."
                       value={teacherSearch}
                       onChange={(e) => setTeacherSearch(e.target.value)}
-                      className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-blue-500 w-44"
+                      className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-blue-500 w-36 sm:w-44"
                     />
                   </div>
                 </div>
@@ -906,7 +999,7 @@ export function GradeAdminModal({
                         <th className="p-3.5">Email GVCN</th>
                         <th className="p-3.5 text-center">Phòng Học</th>
                         <th className="p-3.5 text-center">Sĩ Số</th>
-                        <th className="p-3.5 text-center">Hành Động</th>
+                        <th className="p-3.5 text-center">Thao Tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 text-sm">
@@ -923,12 +1016,22 @@ export function GradeAdminModal({
                           <td className="p-3.5 text-center font-medium text-slate-700">{c.room}</td>
                           <td className="p-3.5 text-center font-bold text-slate-800">{c.studentCount}</td>
                           <td className="p-3.5 text-center">
-                            <button
-                              onClick={() => handleStartEdit(c)}
-                              className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition"
-                            >
-                              ✏️ Sửa Phân Công
-                            </button>
+                            <div className="flex items-center justify-center space-x-1.5">
+                              <button
+                                onClick={() => handleStartEdit(c)}
+                                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+                                title="Sửa phân công GVCN"
+                              >
+                                ✏️ Sửa
+                              </button>
+                              <button
+                                onClick={() => handleDeleteClass(c)}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition cursor-pointer border border-rose-200"
+                                title="Xóa lớp học"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -936,6 +1039,156 @@ export function GradeAdminModal({
                   </table>
                 </div>
               </div>
+
+              {/* MODAL TẠO LỚP HỌC MỚI */}
+              {showAddClassModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+                  <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 animate-in fade-in zoom-in duration-150">
+                    <h4 className="text-base font-bold text-slate-900 border-b border-slate-200 pb-3 flex items-center gap-2">
+                      <span>➕</span> Tạo Lớp Học Mới & Phân Công GVCN
+                    </h4>
+
+                    <form onSubmit={handleCreateClass} className="space-y-3.5 mt-4 text-sm">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Tên Lớp (Ví dụ: 8A9)
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ví dụ: 8A9 hoặc Lớp 8A9"
+                            value={newClassName}
+                            onChange={(e) => {
+                              setNewClassName(e.target.value);
+                              if (!newClassId) {
+                                setNewClassId(e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase());
+                              }
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-bold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Khối Học
+                          </label>
+                          <select
+                            value={newClassGrade}
+                            onChange={(e) => setNewClassGrade(Number(e.target.value))}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-semibold"
+                          >
+                            <option value={6}>Khối 6</option>
+                            <option value={7}>Khối 7</option>
+                            <option value={8}>Khối 8</option>
+                            <option value={9}>Khối 9</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Mã Lớp (Duy nhất)
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ví dụ: 8A9"
+                            value={newClassId}
+                            onChange={(e) => setNewClassId(e.target.value.toUpperCase())}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-mono text-xs font-bold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Sĩ Số Học Sinh
+                          </label>
+                          <input
+                            type="number"
+                            value={newClassStudents}
+                            onChange={(e) => setNewClassStudents(Number(e.target.value))}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-semibold"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Họ và Tên Giáo Viên Chủ Nhiệm
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ví dụ: Thầy Trần Văn Bình"
+                          value={newClassTeacher}
+                          onChange={(e) => setNewClassTeacher(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Số Điện Thoại GVCN
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="0912.xxx.xxx"
+                            value={newClassPhone}
+                            onChange={(e) => setNewClassPhone(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-mono text-xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Phòng Học
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ví dụ: Phòng 217"
+                            value={newClassRoom}
+                            onChange={(e) => setNewClassRoom(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Email Liên Hệ GVCN
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="email@thcsquangtrung.edu.vn"
+                          value={newClassEmail}
+                          onChange={(e) => setNewClassEmail(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-mono text-xs"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddClassModal(false)}
+                          className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                        >
+                          Hủy Bỏ
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={addingClass}
+                          className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
+                        >
+                          {addingClass ? "Đang tạo..." : "✓ Xác Nhận Tạo Lớp"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
 
               {/* MODAL SỬA PHÂN CÔNG GVCN */}
               {editingClass && (
@@ -1003,14 +1256,14 @@ export function GradeAdminModal({
                         <button
                           type="button"
                           onClick={() => setEditingClass(null)}
-                          className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                          className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                         >
                           Hủy Bỏ
                         </button>
                         <button
                           type="submit"
                           disabled={savingTeacher}
-                          className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition disabled:opacity-50"
+                          className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
                         >
                           {savingTeacher ? "Đang lưu..." : "✓ Lưu Cập Nhật"}
                         </button>
@@ -1052,7 +1305,7 @@ export function GradeAdminModal({
                     <button
                       onClick={() => handleTriggerCloudSync("test")}
                       disabled={syncingCloud}
-                      className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-lg transition border border-white/20"
+                      className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-lg transition border border-white/20 cursor-pointer"
                     >
                       ⚡ Test Ping Firestore
                     </button>
@@ -1069,7 +1322,7 @@ export function GradeAdminModal({
                     }`}
                   >
                     <span>{cloudMessage.text}</span>
-                    <button onClick={() => setCloudMessage(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+                    <button onClick={() => setCloudMessage(null)} className="text-slate-400 hover:text-slate-700 cursor-pointer">✕</button>
                   </div>
                 )}
 
@@ -1077,13 +1330,13 @@ export function GradeAdminModal({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 text-center">
                     <div className="text-xs text-blue-700 font-semibold">Lớp Học Đồng Bộ</div>
-                    <div className="text-2xl font-bold text-blue-900 mt-1">32 / 32</div>
+                    <div className="text-2xl font-bold text-blue-900 mt-1">{summary?.classes.length || 32}</div>
                     <div className="text-[10px] text-blue-600 mt-0.5">Khối 6, 7, 8, 9</div>
                   </div>
 
                   <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 text-center">
                     <div className="text-xs text-indigo-700 font-semibold">Học Sinh Toàn Trường</div>
-                    <div className="text-2xl font-bold text-indigo-900 mt-1">~1,390</div>
+                    <div className="text-2xl font-bold text-indigo-900 mt-1">~{summary?.totalStudents || 1390}</div>
                     <div className="text-[10px] text-indigo-600 mt-0.5">Đã ánh xạ mã HS</div>
                   </div>
 
@@ -1110,7 +1363,7 @@ export function GradeAdminModal({
                     <button
                       onClick={() => handleTriggerCloudSync("upload")}
                       disabled={syncingCloud}
-                      className="p-4 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white rounded-xl shadow-md transition text-left flex items-start space-x-3 disabled:opacity-50"
+                      className="p-4 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white rounded-xl shadow-md transition text-left flex items-start space-x-3 disabled:opacity-50 cursor-pointer"
                     >
                       <span className="text-2xl">☁️</span>
                       <div>
@@ -1118,7 +1371,7 @@ export function GradeAdminModal({
                           {syncingCloud ? "Đang đồng bộ..." : "Đẩy Dữ Liệu Lên Cloud Firestore"}
                         </div>
                         <div className="text-xs text-blue-200 mt-0.5">
-                          Đồng bộ toàn bộ 32 lớp học, sự kiện thi đua, phân công GVCN và nề nếp lên Firebase.
+                          Đồng bộ toàn bộ danh mục lớp học, sự kiện thi đua, phân công GVCN và nề nếp lên Firebase.
                         </div>
                       </div>
                     </button>
@@ -1126,7 +1379,7 @@ export function GradeAdminModal({
                     <button
                       onClick={() => handleTriggerCloudSync("download")}
                       disabled={syncingCloud}
-                      className="p-4 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white rounded-xl shadow-md transition text-left flex items-start space-x-3 disabled:opacity-50"
+                      className="p-4 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white rounded-xl shadow-md transition text-left flex items-start space-x-3 disabled:opacity-50 cursor-pointer"
                     >
                       <span className="text-2xl">🔄</span>
                       <div>
@@ -1197,9 +1450,10 @@ export function GradeAdminModal({
                     <span>Quy Tắc Bảo Mật & Phòng Chống Thao Túng Điểm Số:</span>
                   </div>
                   <div className="text-xs text-amber-800 space-y-1">
-                    <div>1. <strong>Tổ Trưởng chỉ chấm trong tổ</strong>: Tài khoản <code>to1..to4</code> bị giới hạn phạm vi, không thể sửa học sinh tổ khác.</div>
-                    <div>2. <strong>Hàng đợi chờ duyệt 100%</strong>: Mọi điểm số do học sinh / cán sự ghi nhận đều phải qua GVCN bấm <code>✓ Duyệt</code> mới tính vào tổng kết.</div>
-                    <div>3. <strong>Mã hóa phiên làm việc</strong>: Sử dụng JWT Session Token kết hợp HttpOnly Cookie chống giả mạo danh tính.</div>
+                    <div>1. <strong>Tài khoản Quản Trị Trường mặc định</strong>: <code>admin</code> / Mật khẩu: <code>Antam2025@</code> (Toàn quyền quản trị danh mục lớp, phân công GVCN, cấu hình bảo mật).</div>
+                    <div>2. <strong>Tổ Trưởng chỉ chấm trong tổ</strong>: Tài khoản <code>to1..to4</code> bị giới hạn phạm vi, không thể sửa học sinh tổ khác.</div>
+                    <div>3. <strong>Hàng đợi chờ duyệt 100%</strong>: Mọi điểm số do học sinh / cán sự ghi nhận đều phải qua GVCN bấm <code>✓ Duyệt</code> mới tính vào tổng kết.</div>
+                    <div>4. <strong>Mã hóa phiên làm việc</strong>: Sử dụng JWT Session Token kết hợp HttpOnly Cookie chống giả mạo danh tính.</div>
                   </div>
                 </div>
               </div>
@@ -1237,7 +1491,7 @@ export function GradeAdminModal({
                     </div>
                     <button
                       onClick={handleExportCSV}
-                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center justify-center space-x-2"
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer"
                     >
                       <span>📥</span>
                       <span>Tải Xuống File CSV (Tuần {week})</span>
@@ -1259,7 +1513,7 @@ export function GradeAdminModal({
                     </div>
                     <button
                       onClick={handlePrintReport}
-                      className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center justify-center space-x-2"
+                      className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer"
                     >
                       <span>🖨️</span>
                       <span>Mở Bản Xem Trước & In A4 (1-Click)</span>
@@ -1290,11 +1544,11 @@ export function GradeAdminModal({
         {/* FOOTER */}
         <div className="bg-slate-100 border-t border-slate-200 px-5 py-3 flex items-center justify-between text-xs text-slate-600">
           <div>
-            🏛️ Hệ thống Quản trị & Thi đua Trường THCS Quang Trung • <strong>Phiên bản 3.0 Hoàn Thiện</strong>
+            🏛️ Hệ thống Quản trị & Thi đua Trường THCS Quang Trung • <strong>Tài khoản Quản Trị: admin / Antam2025@</strong>
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg transition"
+            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg transition cursor-pointer"
           >
             Đóng
           </button>

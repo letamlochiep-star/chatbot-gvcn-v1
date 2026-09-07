@@ -1664,4 +1664,81 @@ export async function updateClassInfo(
   return { ok: true, classInfo: updated };
 }
 
+/**
+ * Thêm lớp học mới vào danh mục trường
+ */
+export async function createClass(
+  newClass: ClassInfo
+): Promise<{ ok: boolean; classInfo?: ClassInfo; message?: string }> {
+  const classes = await getAllClasses();
+  const existing = classes.find((c) => c.classId.toLowerCase() === newClass.classId.toLowerCase());
+  if (existing) {
+    return { ok: false, message: `Mã lớp ${newClass.classId} đã tồn tại trong hệ thống!` };
+  }
+
+  const completeClass: ClassInfo = {
+    classId: newClass.classId.trim().toUpperCase(),
+    className: newClass.className.trim(),
+    grade: Number(newClass.grade) || 8,
+    teacherName: newClass.teacherName?.trim() || "Chưa phân công",
+    teacherEmail: newClass.teacherEmail?.trim() || `gvcn.${newClass.classId.toLowerCase()}@thcsquangtrung.edu.vn`,
+    teacherPhone: newClass.teacherPhone?.trim() || "",
+    studentCount: Number(newClass.studentCount) || 45,
+    room: newClass.room?.trim() || "Phòng học",
+    avgScore: 98.0,
+    rank: classes.length + 1,
+    totalPlus: 0,
+    totalMinus: 0,
+    conductRate: 100,
+  };
+
+  classes.push(completeClass);
+
+  const db = getFirebaseDb();
+  if (db) {
+    try {
+      const docRef = doc(db, "classes", completeClass.classId);
+      await setDoc(docRef, completeClass, { merge: true });
+    } catch {}
+  }
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(CLASSES_FILE, JSON.stringify(classes, null, 2), "utf-8");
+  } catch {}
+
+  return { ok: true, classInfo: completeClass };
+}
+
+/**
+ * Xóa lớp học khỏi danh mục trường
+ */
+export async function deleteClass(
+  classId: string
+): Promise<{ ok: boolean; message?: string }> {
+  let classes = await getAllClasses();
+  const index = classes.findIndex((c) => c.classId === classId);
+  if (index === -1) {
+    return { ok: false, message: `Không tìm thấy lớp ${classId} để xóa.` };
+  }
+
+  classes = classes.filter((c) => c.classId !== classId);
+
+  const db = getFirebaseDb();
+  if (db) {
+    try {
+      const docRef = doc(db, "classes", classId);
+      await deleteDoc(docRef);
+    } catch {}
+  }
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(CLASSES_FILE, JSON.stringify(classes, null, 2), "utf-8");
+  } catch {}
+
+  return { ok: true, message: `Đã xóa lớp ${classId} thành công.` };
+}
+
+
 
