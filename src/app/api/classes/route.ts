@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
-import { getAllClasses, getGradeCompetitionSummary, updateClassInfo, createClass, deleteClass } from "@/lib/db";
+import {
+  getAllClasses,
+  getGradeCompetitionSummary,
+  updateClassInfo,
+  createClass,
+  deleteClass,
+  batchImportClasses,
+  clearAllClasses,
+  resetDemoClasses,
+} from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, classId, updates, newClass } = body;
+    const { action, classId, updates, newClass, classes, overwrite } = body;
 
     if (action === "updateClass" && classId && updates) {
       const result = await updateClassInfo(classId, updates);
@@ -53,6 +62,21 @@ export async function POST(request: NextRequest) {
 
     if (action === "deleteClass" && classId) {
       const result = await deleteClass(classId);
+      return NextResponse.json(result);
+    }
+
+    if (action === "batchImportClasses" && Array.isArray(classes)) {
+      const result = await batchImportClasses(classes, !!overwrite);
+      return NextResponse.json(result);
+    }
+
+    if (action === "clearAllClasses") {
+      const result = await clearAllClasses();
+      return NextResponse.json(result);
+    }
+
+    if (action === "resetDemoClasses") {
+      const result = await resetDemoClasses();
       return NextResponse.json(result);
     }
 

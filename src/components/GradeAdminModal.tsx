@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import * as XLSX from "xlsx";
 import { ClassInfo, GradeCompetitionSummary, CloudSyncStatus, SchoolSecurityRole } from "@/lib/types";
 
 interface Props {
@@ -48,6 +49,13 @@ export function GradeAdminModal({
   const [newClassRoom, setNewClassRoom] = useState("");
   const [newClassStudents, setNewClassStudents] = useState<number>(45);
   const [addingClass, setAddingClass] = useState(false);
+
+  // Excel Import state
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false);
+  const [importedPreviewClasses, setImportedPreviewClasses] = useState<ClassInfo[]>([]);
+  const [importingFile, setImportingFile] = useState(false);
+  const [importOverwrite, setImportOverwrite] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Cloud Sync state
   const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus | null>(null);
@@ -238,6 +246,179 @@ export function GradeAdminModal({
       }
     } catch {
       alert("Lỗi kết nối máy chủ");
+    }
+  };
+
+  // Xóa sạch toàn bộ lớp demo
+  const handleClearAllClasses = async () => {
+    if (!confirm("⚠️ Bạn có chắc chắn muốn xóa sạch toàn bộ danh mục lớp demo hiện tại để nạp danh sách lớp mới?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/classes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clearAllClasses" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        alert("✓ Đã làm sạch danh mục lớp demo! Bạn có thể nhập danh sách lớp mới từ file Excel.");
+        fetchGradeSummary(week, grade);
+      }
+    } catch {
+      alert("Lỗi kết nối máy chủ");
+    }
+  };
+
+  // Khôi phục 32 lớp mẫu
+  const handleResetDemoClasses = async () => {
+    if (!confirm("Khôi phục lại 32 lớp mẫu ban đầu của trường THCS Quang Trung?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/classes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resetDemoClasses" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        alert("✓ Đã khôi phục 32 lớp mẫu thành công!");
+        fetchGradeSummary(week, grade);
+      }
+    } catch {
+      alert("Lỗi kết nối máy chủ");
+    }
+  };
+
+  // Tải file Excel mẫu: STT | LỚP | GVCN
+  const handleDownloadExcelTemplate = () => {
+    const templateData = [
+      { STT: 1, "Lớp": "8A1", "GVCN": "Cô Trần Thị Mai", "Phòng Học": "Phòng 201", "Số Điện Thoại": "0912.345.801" },
+      { STT: 2, "Lớp": "8A2", "GVCN": "Thầy Lê Văn Hùng", "Phòng Học": "Phòng 202", "Số Điện Thoại": "0912.345.802" },
+      { STT: 3, "Lớp": "8A3", "GVCN": "Cô Phạm Thanh Hà", "Phòng Học": "Phòng 203", "Số Điện Thoại": "0912.345.803" },
+      { STT: 4, "Lớp": "8A6", "GVCN": "Thầy Vũ Minh Tuấn", "Phòng Học": "Phòng 206", "Số Điện Thoại": "0912.345.806" },
+      { STT: 5, "Lớp": "6A1", "GVCN": "Cô Nguyễn Thu Hà", "Phòng Học": "Phòng 101", "Số Điện Thoại": "0912.345.601" },
+      { STT: 6, "Lớp": "7A1", "GVCN": "Cô Ngô Thị Vân", "Phòng Học": "Phòng 109", "Số Điện Thoại": "0912.345.701" },
+      { STT: 7, "Lớp": "9A1", "GVCN": "Cô Nguyễn Thị Phương", "Phòng Học": "Phòng 209", "Số Điện Thoại": "0912.345.901" },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "DanhSachLop");
+    XLSX.writeFile(wb, "Mau_Danh_Sach_Lop_GVCN.xlsx");
+  };
+
+  // Đọc và phân tích file Excel do Quản Trị upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: "binary" });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const rawJson: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+        if (!rawJson || rawJson.length === 0) {
+          alert("File Excel không có dữ liệu!");
+          return;
+        }
+
+        const parsedClasses: ClassInfo[] = [];
+
+        rawJson.forEach((row, idx) => {
+          // Tìm trường Lớp (có thể là row["Lớp"], row["lop"], row["Lop"], row["Tên lớp"]...)
+          const classField =
+            row["Lớp"] || row["lop"] || row["Lop"] || row["Lớp học"] || row["Tên lớp"] || row["ten_lop"] || "";
+          
+          // Tìm trường GVCN
+          const gvcnField =
+            row["GVCN"] || row["gvcn"] || row["Giáo viên chủ nhiệm"] || row["Giao vien chu nhiem"] || row["Tên GVCN"] || "";
+
+          // Tìm trường Phòng học
+          const roomField = row["Phòng Học"] || row["Phòng"] || row["phong"] || row["Phong"] || "";
+
+          // Tìm trường Số điện thoại
+          const phoneField = row["Số Điện Thoại"] || row["SĐT"] || row["sdt"] || row["Dien thoai"] || "";
+
+          if (classField) {
+            const rawName = String(classField).trim();
+            const cleanClassName = rawName.startsWith("Lớp") ? rawName : `Lớp ${rawName}`;
+            const rawClassId = rawName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+
+            // Nhận diện khối: 6, 7, 8, 9
+            const matchGrade = cleanClassName.match(/\b([6-9])/);
+            const gradeNum = matchGrade ? parseInt(matchGrade[1], 10) : 8;
+
+            parsedClasses.push({
+              classId: rawClassId,
+              className: cleanClassName,
+              grade: gradeNum,
+              teacherName: String(gvcnField).trim() || "Chưa phân công",
+              teacherEmail: `gvcn.${rawClassId.toLowerCase()}@thcsquangtrung.edu.vn`,
+              teacherPhone: String(phoneField).trim(),
+              studentCount: 45,
+              room: String(roomField).trim() || `Phòng ${rawClassId}`,
+              avgScore: 98.0,
+              rank: idx + 1,
+              totalPlus: 0,
+              totalMinus: 0,
+              conductRate: 100,
+            });
+          }
+        });
+
+        if (parsedClasses.length === 0) {
+          alert("Không tìm thấy cột 'Lớp' hoặc 'GVCN' trong file Excel. Vui lòng tải file mẫu để xem định dạng chuẩn!");
+          return;
+        }
+
+        setImportedPreviewClasses(parsedClasses);
+        setShowImportExcelModal(true);
+      } catch (err: any) {
+        alert(`Lỗi đọc file Excel: ${err?.message || "File không hợp lệ"}`);
+      }
+    };
+
+    reader.readAsBinaryString(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // Xác nhận lưu các lớp từ Excel vào cơ sở dữ liệu
+  const handleConfirmImportExcel = async () => {
+    if (importedPreviewClasses.length === 0) return;
+
+    setImportingFile(true);
+    try {
+      const res = await fetch("/api/classes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "batchImportClasses",
+          classes: importedPreviewClasses,
+          overwrite: importOverwrite,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        alert(data.message || `✓ Đã nhập thành công ${importedPreviewClasses.length} lớp học!`);
+        setShowImportExcelModal(false);
+        setImportedPreviewClasses([]);
+        fetchGradeSummary(week, grade);
+      } else {
+        alert(data.message || "Lỗi khi nhập dữ liệu");
+      }
+    } catch {
+      alert("Lỗi kết nối máy chủ");
+    } finally {
+      setImportingFile(false);
     }
   };
 
@@ -467,6 +648,15 @@ export function GradeAdminModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
         
+        {/* INPUT FILE ẨN CHO EXCEL UPLOAD */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          accept=".xlsx, .xls, .csv"
+          className="hidden"
+        />
+
         {/* HEADER MODAL */}
         <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white px-5 py-4 flex items-center justify-between shadow-md">
           <div className="flex items-center space-x-3">
@@ -483,7 +673,7 @@ export function GradeAdminModal({
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Quản trị danh mục lớp học & Phân công GVCN • Đồng bộ Cloud Firebase • Ma trận bảo mật RBAC
+                Quản trị danh mục lớp học & Phân công GVCN • Nhập Excel 1 chạm • Đồng bộ Cloud Firebase
               </p>
             </div>
           </div>
@@ -940,7 +1130,7 @@ export function GradeAdminModal({
           )}
 
           {/* ========================================================= */}
-          {/* TAB 3: TẠO DANH MỤC LỚP HỌC & PHÂN CÔNG GVCN */}
+          {/* TAB 3: TẠO DANH MỤC LỚP HỌC & NHẬP EXCEL */}
           {/* ========================================================= */}
           {activeTab === "teachers" && (
             <div className="space-y-6">
@@ -951,17 +1141,44 @@ export function GradeAdminModal({
                       <span>👩‍🏫</span> Danh Mục Lớp Học & Phân Công Giáo Viên Chủ Nhiệm
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Quản trị trường tạo danh mục lớp học theo tên lớp, khối và phân công giáo viên chủ nhiệm toàn trường.
+                      Quản trị trường có thể tạo lớp mới, xóa lớp demo, hoặc <strong>upload trực tiếp từ file Excel</strong> theo mẫu (STT | LỚP | GVCN).
                     </p>
                   </div>
 
+                  {/* CÁC NÚT HÀNH ĐỘNG IMPORT EXCEL & TẠO LỚP */}
                   <div className="flex items-center space-x-2 flex-wrap gap-2">
-                    {/* Nút Tạo Lớp Mới */}
+                    {/* Nút Tải Mẫu Excel */}
+                    <button
+                      onClick={handleDownloadExcelTemplate}
+                      className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer"
+                      title="Tải mẫu Excel 3 cột: STT | Lớp | GVCN"
+                    >
+                      <span>📥</span> Tải File Mẫu Excel
+                    </button>
+
+                    {/* Nút Upload File Excel */}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>📤</span> Nhập Từ File Excel
+                    </button>
+
+                    {/* Nút Tạo Lớp Mới Thủ Công */}
                     <button
                       onClick={() => setShowAddClassModal(true)}
                       className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
                     >
-                      <span>➕</span> Tạo Lớp Học Mới
+                      <span>➕</span> Tạo Lớp Mới
+                    </button>
+
+                    {/* Nút Xóa Lớp Demo */}
+                    <button
+                      onClick={handleClearAllClasses}
+                      className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-lg transition cursor-pointer"
+                      title="Xóa sạch các lớp demo cũ để nạp mới"
+                    >
+                      <span>🗑️</span> Xóa Lớp Demo
                     </button>
 
                     {/* Lọc Khối */}
@@ -970,7 +1187,7 @@ export function GradeAdminModal({
                       onChange={(e) => setTeacherFilterGrade(Number(e.target.value))}
                       className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg outline-none cursor-pointer"
                     >
-                      <option value={0}>Tất Cả Các Khối</option>
+                      <option value={0}>Tất Cả Khối</option>
                       <option value={6}>Khối 6</option>
                       <option value={7}>Khối 7</option>
                       <option value={8}>Khối 8</option>
@@ -980,67 +1197,179 @@ export function GradeAdminModal({
                     {/* Ô Tìm kiếm */}
                     <input
                       type="text"
-                      placeholder="Tìm tên GV, lớp..."
+                      placeholder="Tìm GV, lớp..."
                       value={teacherSearch}
                       onChange={(e) => setTeacherSearch(e.target.value)}
-                      className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-blue-500 w-36 sm:w-44"
+                      className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-blue-500 w-32 sm:w-40"
                     />
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
-                        <th className="p-3.5">Mã Lớp</th>
-                        <th className="p-3.5">Tên Lớp & Khối</th>
-                        <th className="p-3.5">Giáo Viên Chủ Nhiệm</th>
-                        <th className="p-3.5">Số Điện Thoại</th>
-                        <th className="p-3.5">Email GVCN</th>
-                        <th className="p-3.5 text-center">Phòng Học</th>
-                        <th className="p-3.5 text-center">Sĩ Số</th>
-                        <th className="p-3.5 text-center">Thao Tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 text-sm">
-                      {filteredTeacherClasses.map((c) => (
-                        <tr key={c.classId} className="hover:bg-slate-50 transition">
-                          <td className="p-3.5 font-bold text-blue-900">{c.classId}</td>
-                          <td className="p-3.5">
-                            <span className="font-bold text-slate-800">{c.className}</span>
-                            <span className="text-xs text-slate-500 ml-1.5">(Khối {c.grade})</span>
-                          </td>
-                          <td className="p-3.5 font-semibold text-slate-900">{c.teacherName}</td>
-                          <td className="p-3.5 text-slate-600 font-mono text-xs">{c.teacherPhone || "---"}</td>
-                          <td className="p-3.5 text-slate-600 text-xs">{c.teacherEmail}</td>
-                          <td className="p-3.5 text-center font-medium text-slate-700">{c.room}</td>
-                          <td className="p-3.5 text-center font-bold text-slate-800">{c.studentCount}</td>
-                          <td className="p-3.5 text-center">
-                            <div className="flex items-center justify-center space-x-1.5">
-                              <button
-                                onClick={() => handleStartEdit(c)}
-                                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition cursor-pointer"
-                                title="Sửa phân công GVCN"
-                              >
-                                ✏️ Sửa
-                              </button>
-                              <button
-                                onClick={() => handleDeleteClass(c)}
-                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition cursor-pointer border border-rose-200"
-                                title="Xóa lớp học"
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          </td>
+                {filteredTeacherClasses.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500 space-y-3">
+                    <div className="text-3xl">📭</div>
+                    <div className="text-sm font-semibold">Chưa có lớp học nào trong danh mục.</div>
+                    <div className="text-xs text-slate-400">
+                      Hãy bấm <strong>"📤 Nhập Từ File Excel"</strong> để nạp danh sách lớp hoặc bấm <strong>"➕ Tạo Lớp Mới"</strong>.
+                    </div>
+                    <div className="pt-2">
+                      <button
+                        onClick={handleResetDemoClasses}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition cursor-pointer"
+                      >
+                        🔄 Khôi Phục Danh Mục 32 Lớp Mẫu Ban Đầu
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                          <th className="p-3.5">Mã Lớp</th>
+                          <th className="p-3.5">Tên Lớp & Khối</th>
+                          <th className="p-3.5">Giáo Viên Chủ Nhiệm</th>
+                          <th className="p-3.5">Số Điện Thoại</th>
+                          <th className="p-3.5">Email GVCN</th>
+                          <th className="p-3.5 text-center">Phòng Học</th>
+                          <th className="p-3.5 text-center">Sĩ Số</th>
+                          <th className="p-3.5 text-center">Thao Tác</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 text-sm">
+                        {filteredTeacherClasses.map((c) => (
+                          <tr key={c.classId} className="hover:bg-slate-50 transition">
+                            <td className="p-3.5 font-bold text-blue-900">{c.classId}</td>
+                            <td className="p-3.5">
+                              <span className="font-bold text-slate-800">{c.className}</span>
+                              <span className="text-xs text-slate-500 ml-1.5">(Khối {c.grade})</span>
+                            </td>
+                            <td className="p-3.5 font-semibold text-slate-900">{c.teacherName}</td>
+                            <td className="p-3.5 text-slate-600 font-mono text-xs">{c.teacherPhone || "---"}</td>
+                            <td className="p-3.5 text-slate-600 text-xs">{c.teacherEmail}</td>
+                            <td className="p-3.5 text-center font-medium text-slate-700">{c.room}</td>
+                            <td className="p-3.5 text-center font-bold text-slate-800">{c.studentCount}</td>
+                            <td className="p-3.5 text-center">
+                              <div className="flex items-center justify-center space-x-1.5">
+                                <button
+                                  onClick={() => handleStartEdit(c)}
+                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+                                  title="Sửa phân công GVCN"
+                                >
+                                  ✏️ Sửa
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteClass(c)}
+                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition cursor-pointer border border-rose-200"
+                                  title="Xóa lớp học"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
-              {/* MODAL TẠO LỚP HỌC MỚI */}
+              {/* MODAL XEM TRƯỚC & XÁC NHẬN IMPORT EXCEL */}
+              {showImportExcelModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4">
+                  <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full p-6 animate-in fade-in zoom-in duration-150 flex flex-col max-h-[85vh]">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <span>📤</span> Xác Nhận Nhập Danh Sách Lớp Từ File Excel
+                      </h4>
+                      <button
+                        onClick={() => setShowImportExcelModal(false)}
+                        className="text-slate-400 hover:text-slate-700 text-sm cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="my-4 text-xs text-slate-600">
+                      Đã đọc được <strong>{importedPreviewClasses.length} lớp học</strong> từ file Excel theo mẫu chuẩn. Vui lòng chọn cách thức lưu:
+                    </div>
+
+                    {/* TÙY CHỌN GHI ĐÈ HOẶC BỔ SUNG */}
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 mb-4 text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          checked={importOverwrite}
+                          onChange={() => setImportOverwrite(true)}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>🗑️ Ghi đè / Xóa sạch lớp demo cũ & Thay thế toàn bộ bằng danh sách Excel ({importedPreviewClasses.length} lớp)</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          checked={!importOverwrite}
+                          onChange={() => setImportOverwrite(false)}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>➕ Bổ sung / Cập nhật vào danh mục lớp hiện có</span>
+                      </label>
+                    </div>
+
+                    {/* BẢNG XEM TRƯỚC */}
+                    <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl mb-4">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0">
+                          <tr>
+                            <th className="p-2.5 w-10 text-center">STT</th>
+                            <th className="p-2.5">Lớp Học</th>
+                            <th className="p-2.5">Khối</th>
+                            <th className="p-2.5">Giáo Viên Chủ Nhiệm</th>
+                            <th className="p-2.5">Phòng Học</th>
+                            <th className="p-2.5">Số Điện Thoại</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {importedPreviewClasses.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="p-2.5 text-center text-slate-500">{idx + 1}</td>
+                              <td className="p-2.5 font-bold text-blue-900">{item.className}</td>
+                              <td className="p-2.5 font-semibold text-slate-700">Khối {item.grade}</td>
+                              <td className="p-2.5 font-bold text-slate-900">{item.teacherName}</td>
+                              <td className="p-2.5 text-slate-600">{item.room}</td>
+                              <td className="p-2.5 text-slate-600 font-mono">{item.teacherPhone || "---"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setShowImportExcelModal(false)}
+                        className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                      >
+                        Hủy Bỏ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmImportExcel}
+                        disabled={importingFile}
+                        className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                      >
+                        {importingFile ? "Đang lưu..." : `✓ Xác Nhận Lưu ${importedPreviewClasses.length} Lớp`}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL TẠO LỚP HỌC MỚI THỦ CÔNG */}
               {showAddClassModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
                   <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 animate-in fade-in zoom-in duration-150">
@@ -1330,13 +1659,13 @@ export function GradeAdminModal({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 text-center">
                     <div className="text-xs text-blue-700 font-semibold">Lớp Học Đồng Bộ</div>
-                    <div className="text-2xl font-bold text-blue-900 mt-1">{summary?.classes.length || 32}</div>
+                    <div className="text-2xl font-bold text-blue-900 mt-1">{summary?.classes.length || 0}</div>
                     <div className="text-[10px] text-blue-600 mt-0.5">Khối 6, 7, 8, 9</div>
                   </div>
 
                   <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 text-center">
                     <div className="text-xs text-indigo-700 font-semibold">Học Sinh Toàn Trường</div>
-                    <div className="text-2xl font-bold text-indigo-900 mt-1">~{summary?.totalStudents || 1390}</div>
+                    <div className="text-2xl font-bold text-indigo-900 mt-1">~{summary?.totalStudents || 0}</div>
                     <div className="text-[10px] text-indigo-600 mt-0.5">Đã ánh xạ mã HS</div>
                   </div>
 

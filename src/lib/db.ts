@@ -1740,5 +1740,120 @@ export async function deleteClass(
   return { ok: true, message: `Đã xóa lớp ${classId} thành công.` };
 }
 
+/**
+ * Nhập danh sách lớp học hàng loạt từ File Excel (STT | LỚP | GVCN)
+ */
+export async function batchImportClasses(
+  importedList: ClassInfo[],
+  overwrite: boolean = false
+): Promise<{ ok: boolean; count: number; message: string }> {
+  let classes = overwrite ? [] : await getAllClasses();
+
+  let added = 0;
+  let updated = 0;
+
+  for (const item of importedList) {
+    const rawClassId = (item.classId || item.className.replace(/[^a-zA-Z0-9]/g, "")).toUpperCase();
+    const cleanClassName = item.className.trim().startsWith("Lớp") ? item.className.trim() : `Lớp ${item.className.trim()}`;
+    
+    // Tự động nhận diện khối từ tên lớp (ví dụ: 8A1 -> 8, 6A2 -> 6)
+    const gradeMatch = cleanClassName.match(/\b([6-9])/);
+    const grade = item.grade || (gradeMatch ? parseInt(gradeMatch[1], 10) : 8);
+
+    const completeItem: ClassInfo = {
+      classId: rawClassId,
+      className: cleanClassName,
+      grade,
+      teacherName: item.teacherName?.trim() || "Chưa phân công",
+      teacherEmail: item.teacherEmail?.trim() || `gvcn.${rawClassId.toLowerCase()}@thcsquangtrung.edu.vn`,
+      teacherPhone: item.teacherPhone?.trim() || "",
+      studentCount: Number(item.studentCount) || 45,
+      room: item.room?.trim() || `Phòng ${rawClassId}`,
+      avgScore: 98.0,
+      rank: classes.length + 1,
+      totalPlus: 0,
+      totalMinus: 0,
+      conductRate: 100,
+    };
+
+    const existingIndex = classes.findIndex((c) => c.classId === rawClassId);
+    if (existingIndex !== -1) {
+      classes[existingIndex] = {
+        ...classes[existingIndex],
+        ...completeItem,
+      };
+      updated++;
+    } else {
+      classes.push(completeItem);
+      added++;
+    }
+
+    const db = getFirebaseDb();
+    if (db) {
+      try {
+        const docRef = doc(db, "classes", rawClassId);
+        await setDoc(docRef, completeItem, { merge: true });
+      } catch {}
+    }
+  }
+
+  // Đánh lại thứ hạng
+  classes.forEach((c, idx) => {
+    c.rank = idx + 1;
+  });
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(CLASSES_FILE, JSON.stringify(classes, null, 2), "utf-8");
+  } catch {}
+
+  return {
+    ok: true,
+    count: classes.length,
+    message: overwrite
+      ? `Đã thay thế toàn bộ danh mục trường thành công với ${classes.length} lớp học từ file Excel!`
+      : `Đã nhập thành công: Thêm mới ${added} lớp, cập nhật ${updated} lớp từ file Excel!`,
+  };
+}
+
+/**
+ * Xóa sạch danh mục lớp demo
+ */
+export async function clearAllClasses(): Promise<{ ok: boolean; message: string }> {
+  const classes: ClassInfo[] = [];
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(CLASSES_FILE, JSON.stringify(classes, null, 2), "utf-8");
+  } catch {}
+
+  return { ok: true, message: "Đã làm sạch danh mục lớp học. Bạn có thể tải file Excel để nạp danh sách lớp mới." };
+}
+
+/**
+ * Khôi phục danh mục 32 lớp mẫu ban đầu
+ */
+export async function resetDemoClasses(): Promise<{ ok: boolean; message: string }> {
+  const classes = [...DEFAULT_ALL_SCHOOL_CLASSES];
+
+  const db = getFirebaseDb();
+  if (db) {
+    try {
+      for (const c of classes) {
+        const docRef = doc(db, "classes", c.classId);
+        await setDoc(docRef, c, { merge: true });
+      }
+    } catch {}
+  }
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(CLASSES_FILE, JSON.stringify(classes, null, 2), "utf-8");
+  } catch {}
+
+  return { ok: true, message: "Đã khôi phục danh mục 32 lớp học mẫu của trường THCS Quang Trung." };
+}
+
+
 
 
