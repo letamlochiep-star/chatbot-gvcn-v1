@@ -221,6 +221,7 @@ export interface CompetitionEvent {
 export interface StudentRankItem {
   rank: number;
   studentId: string;
+  stt?: string;
   fullName: string;
   team: number;
   isTeamLeader: boolean;
