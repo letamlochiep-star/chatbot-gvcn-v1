@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCloudStatus, syncAllToCloud, pullLatestFromCloud, getSchoolSecurityMatrix } from "@/lib/firebaseSync";
-import { verifySessionToken } from "@/lib/auth";
+import { authenticateApiRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const sessionCookie = req.cookies.get("hscn_session")?.value;
-    const session = sessionCookie ? await verifySessionToken(sessionCookie) : null;
+    // Sử dụng authenticateApiRequest để đọc đúng cookie + hỗ trợ Bearer token
+    const session = await authenticateApiRequest(req);
 
     if (!session || (session.role !== "admin" && session.role !== "school_admin" && session.role !== "bgh" && session.role !== "teacher")) {
       return NextResponse.json(
@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const action = body.action || "test";
 
-    if (action === "upload") {
+    // syncAll = upload toàn bộ dữ liệu lên Cloud
+    if (action === "upload" || action === "syncAll") {
       const res = await syncAllToCloud();
       return NextResponse.json(res);
     }
