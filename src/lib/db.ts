@@ -1492,6 +1492,7 @@ export async function reviewCompetitionSubmission(
 // ==========================================
 
 const CLASSES_FILE = path.join(DATA_DIR, "classes.json");
+const TEACHER_ACCOUNTS_FILE = path.join(DATA_DIR, "teacher_accounts.json");
 
 export const DEFAULT_ALL_SCHOOL_CLASSES: ClassInfo[] = [
   // KHỐI 6 (6A1 - 6A8)
@@ -1550,25 +1551,33 @@ export async function getAllClasses(grade?: number): Promise<ClassInfo[]> {
       snap.forEach((d) => {
         list.push(d.data() as ClassInfo);
       });
+      if (list.length > 0) {
+        if (grade && grade > 0) {
+          return list.filter((c) => c.grade === grade);
+        }
+        return list;
+      }
     } catch {}
   }
 
-  if (list.length === 0) {
-    ensureDataDir();
-    if (fs.existsSync(CLASSES_FILE)) {
-      try {
-        const raw = fs.readFileSync(CLASSES_FILE, "utf-8");
-        list = JSON.parse(raw);
-      } catch {}
+  ensureDataDir();
+  if (fs.existsSync(CLASSES_FILE)) {
+    try {
+      const raw = fs.readFileSync(CLASSES_FILE, "utf-8");
+      list = JSON.parse(raw);
+    } catch {
+      list = [];
     }
-  }
-
-  if (list.length === 0) {
+  } else {
+    // Khởi tạo lần đầu tiên với 32 lớp mẫu
     list = [...DEFAULT_ALL_SCHOOL_CLASSES];
+    try {
+      fs.writeFileSync(CLASSES_FILE, JSON.stringify(list, null, 2), "utf-8");
+    } catch {}
   }
 
   if (grade && grade > 0) {
-    list = list.filter((c) => c.grade === grade);
+    return list.filter((c) => c.grade === grade);
   }
 
   return list;
@@ -1586,7 +1595,7 @@ export async function getGradeCompetitionSummary(
   // Tính toán kết quả thực tế của lớp 8A6 từ db
   try {
     const dash8A6 = await getWeeklyCompetitionDashboard(week);
-    const index8A6 = classes.findIndex((c) => c.classId === "8A6");
+    const index8A6 = classes.findIndex((c) => c.classId.toUpperCase() === "8A6");
     if (index8A6 !== -1 && dash8A6) {
       classes[index8A6] = {
         ...classes[index8A6],
@@ -1637,7 +1646,8 @@ export async function updateClassInfo(
   updates: Partial<ClassInfo>
 ): Promise<{ ok: boolean; classInfo?: ClassInfo; message?: string }> {
   const classes = await getAllClasses();
-  const index = classes.findIndex((c) => c.classId === classId);
+  const cleanId = String(classId).trim().toUpperCase();
+  const index = classes.findIndex((c) => c.classId.toUpperCase() === cleanId);
   if (index === -1) {
     return { ok: false, message: `Không tìm thấy lớp ${classId}` };
   }
@@ -1651,7 +1661,7 @@ export async function updateClassInfo(
   const db = getFirebaseDb();
   if (db) {
     try {
-      const docRef = doc(db, "classes", classId);
+      const docRef = doc(db, "classes", cleanId);
       await setDoc(docRef, updated, { merge: true });
     } catch {}
   }
@@ -1671,20 +1681,21 @@ export async function createClass(
   newClass: ClassInfo
 ): Promise<{ ok: boolean; classInfo?: ClassInfo; message?: string }> {
   const classes = await getAllClasses();
-  const existing = classes.find((c) => c.classId.toLowerCase() === newClass.classId.toLowerCase());
+  const rawId = (newClass.classId || newClass.className.replace(/[^a-zA-Z0-9]/g, "")).trim().toUpperCase();
+  const existing = classes.find((c) => c.classId.toUpperCase() === rawId);
   if (existing) {
-    return { ok: false, message: `Mã lớp ${newClass.classId} đã tồn tại trong hệ thống!` };
+    return { ok: false, message: `Mã lớp ${rawId} đã tồn tại trong hệ thống!` };
   }
 
   const completeClass: ClassInfo = {
-    classId: newClass.classId.trim().toUpperCase(),
-    className: newClass.className.trim(),
+    classId: rawId,
+    className: newClass.className.trim().startsWith("Lớp") ? newClass.className.trim() : `Lớp ${newClass.className.trim()}`,
     grade: Number(newClass.grade) || 8,
     teacherName: newClass.teacherName?.trim() || "Chưa phân công",
-    teacherEmail: newClass.teacherEmail?.trim() || `gvcn.${newClass.classId.toLowerCase()}@thcsquangtrung.edu.vn`,
+    teacherEmail: newClass.teacherEmail?.trim() || `gvcn.${rawId.toLowerCase()}@thcsquangtrung.edu.vn`,
     teacherPhone: newClass.teacherPhone?.trim() || "",
     studentCount: Number(newClass.studentCount) || 45,
-    room: newClass.room?.trim() || "Phòng học",
+    room: newClass.room?.trim() || `Phòng ${rawId}`,
     avgScore: 98.0,
     rank: classes.length + 1,
     totalPlus: 0,
@@ -1717,17 +1728,18 @@ export async function deleteClass(
   classId: string
 ): Promise<{ ok: boolean; message?: string }> {
   let classes = await getAllClasses();
-  const index = classes.findIndex((c) => c.classId === classId);
+  const cleanId = String(classId).trim().toUpperCase();
+  const index = classes.findIndex((c) => c.classId.toUpperCase() === cleanId);
   if (index === -1) {
     return { ok: false, message: `Không tìm thấy lớp ${classId} để xóa.` };
   }
 
-  classes = classes.filter((c) => c.classId !== classId);
+  classes = classes.filter((c) => c.classId.toUpperCase() !== cleanId);
 
   const db = getFirebaseDb();
   if (db) {
     try {
-      const docRef = doc(db, "classes", classId);
+      const docRef = doc(db, "classes", cleanId);
       await deleteDoc(docRef);
     } catch {}
   }
@@ -1737,7 +1749,7 @@ export async function deleteClass(
     fs.writeFileSync(CLASSES_FILE, JSON.stringify(classes, null, 2), "utf-8");
   } catch {}
 
-  return { ok: true, message: `Đã xóa lớp ${classId} thành công.` };
+  return { ok: true, message: `Đã xóa lớp ${cleanId} thành công.` };
 }
 
 /**
@@ -1753,7 +1765,7 @@ export async function batchImportClasses(
   let updated = 0;
 
   for (const item of importedList) {
-    const rawClassId = (item.classId || item.className.replace(/[^a-zA-Z0-9]/g, "")).toUpperCase();
+    const rawClassId = (item.classId || item.className.replace(/[^a-zA-Z0-9]/g, "")).trim().toUpperCase();
     const cleanClassName = item.className.trim().startsWith("Lớp") ? item.className.trim() : `Lớp ${item.className.trim()}`;
     
     // Tự động nhận diện khối từ tên lớp (ví dụ: 8A1 -> 8, 6A2 -> 6)
@@ -1776,7 +1788,7 @@ export async function batchImportClasses(
       conductRate: 100,
     };
 
-    const existingIndex = classes.findIndex((c) => c.classId === rawClassId);
+    const existingIndex = classes.findIndex((c) => c.classId.toUpperCase() === rawClassId);
     if (existingIndex !== -1) {
       classes[existingIndex] = {
         ...classes[existingIndex],
@@ -1820,11 +1832,19 @@ export async function batchImportClasses(
  * Xóa sạch danh mục lớp demo
  */
 export async function clearAllClasses(): Promise<{ ok: boolean; message: string }> {
-  const classes: ClassInfo[] = [];
+  const db = getFirebaseDb();
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, "classes"));
+      const deletePromises: Promise<any>[] = [];
+      snap.forEach((d) => deletePromises.push(deleteDoc(d.ref)));
+      await Promise.all(deletePromises);
+    } catch {}
+  }
 
   ensureDataDir();
   try {
-    fs.writeFileSync(CLASSES_FILE, JSON.stringify(classes, null, 2), "utf-8");
+    fs.writeFileSync(CLASSES_FILE, JSON.stringify([], null, 2), "utf-8");
   } catch {}
 
   return { ok: true, message: "Đã làm sạch danh mục lớp học. Bạn có thể tải file Excel để nạp danh sách lớp mới." };
@@ -1854,6 +1874,262 @@ export async function resetDemoClasses(): Promise<{ ok: boolean; message: string
   return { ok: true, message: "Đã khôi phục danh mục 32 lớp học mẫu của trường THCS Quang Trung." };
 }
 
+// =========================================================================
+// 🔑 QUẢN LÝ & CẤP TÀI KHOẢN QUẢN TRỊ LỚP CHO GVCN HÀNG LOẠT
+// =========================================================================
 
+export interface TeacherAccountRecord {
+  classId: string;
+  className: string;
+  grade: number;
+  teacherName: string;
+  username: string;
+  password: string;
+  phone?: string;
+  email?: string;
+  status: "active" | "locked";
+  updatedAt?: string;
+}
 
+/**
+ * Lấy danh sách toàn bộ tài khoản GVCN của trường
+ */
+export async function getAllTeacherAccounts(): Promise<TeacherAccountRecord[]> {
+  const db = getFirebaseDb();
+  let list: TeacherAccountRecord[] = [];
 
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, "teacher_accounts"));
+      snap.forEach((d) => {
+        list.push(d.data() as TeacherAccountRecord);
+      });
+      if (list.length > 0) return list;
+    } catch {}
+  }
+
+  ensureDataDir();
+  if (fs.existsSync(TEACHER_ACCOUNTS_FILE)) {
+    try {
+      const raw = fs.readFileSync(TEACHER_ACCOUNTS_FILE, "utf-8");
+      list = JSON.parse(raw);
+      if (Array.isArray(list) && list.length > 0) return list;
+    } catch {}
+  }
+
+  // Khởi tạo tự động từ danh mục lớp hiện có
+  const classes = await getAllClasses();
+  list = classes.map((c) => ({
+    classId: c.classId,
+    className: c.className,
+    grade: c.grade,
+    teacherName: c.teacherName,
+    username: `gvcn.${c.classId.toLowerCase()}`,
+    password: "Antam2025@",
+    phone: c.teacherPhone || "",
+    email: c.teacherEmail || `gvcn.${c.classId.toLowerCase()}@thcsquangtrung.edu.vn`,
+    status: "active",
+    updatedAt: new Date().toISOString(),
+  }));
+
+  try {
+    fs.writeFileSync(TEACHER_ACCOUNTS_FILE, JSON.stringify(list, null, 2), "utf-8");
+  } catch {}
+
+  return list;
+}
+
+/**
+ * Sinh tài khoản GVCN hàng loạt cho toàn bộ các lớp
+ */
+export async function batchGenerateTeacherAccounts(options?: {
+  usernameFormat?: "prefix_class" | "email" | "phone";
+  defaultPassword?: string;
+  randomPasswords?: boolean;
+}): Promise<{ ok: boolean; count: number; accounts: TeacherAccountRecord[]; message: string }> {
+  const classes = await getAllClasses();
+  const format = options?.usernameFormat || "prefix_class";
+  const defaultPass = options?.defaultPassword?.trim() || "Antam2025@";
+
+  const accounts: TeacherAccountRecord[] = classes.map((c) => {
+    let username = `gvcn.${c.classId.toLowerCase()}`;
+    if (format === "email" && c.teacherEmail) {
+      username = c.teacherEmail.trim().toLowerCase();
+    } else if (format === "phone" && c.teacherPhone) {
+      username = c.teacherPhone.replace(/[^0-9]/g, "");
+    }
+
+    let password = defaultPass;
+    if (options?.randomPasswords) {
+      // Sinh mật khẩu an toàn dễ nhớ theo mã lớp: Gvcn@8A6!
+      password = `Gvcn@${c.classId}!`;
+    }
+
+    return {
+      classId: c.classId,
+      className: c.className,
+      grade: c.grade,
+      teacherName: c.teacherName,
+      username,
+      password,
+      phone: c.teacherPhone || "",
+      email: c.teacherEmail || `${username}@thcsquangtrung.edu.vn`,
+      status: "active",
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  const db = getFirebaseDb();
+  if (db) {
+    try {
+      for (const acc of accounts) {
+        const docRef = doc(db, "teacher_accounts", acc.classId);
+        await setDoc(docRef, acc, { merge: true });
+      }
+    } catch {}
+  }
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(TEACHER_ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), "utf-8");
+  } catch {}
+
+  return {
+    ok: true,
+    count: accounts.length,
+    accounts,
+    message: `Đã sinh thành công ${accounts.length} tài khoản quản trị lớp cho GVCN!`,
+  };
+}
+
+/**
+ * Cập nhật thông tin tài khoản của một GVCN (Đổi mật khẩu / Đổi tên đăng nhập / Khóa)
+ */
+export async function updateTeacherAccount(
+  classId: string,
+  updates: Partial<TeacherAccountRecord>
+): Promise<{ ok: boolean; account?: TeacherAccountRecord; message?: string }> {
+  const accounts = await getAllTeacherAccounts();
+  const cleanId = classId.trim().toUpperCase();
+  const index = accounts.findIndex((a) => a.classId.toUpperCase() === cleanId);
+
+  if (index === -1) {
+    return { ok: false, message: `Không tìm thấy tài khoản cho lớp ${classId}` };
+  }
+
+  const updated: TeacherAccountRecord = {
+    ...accounts[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  accounts[index] = updated;
+
+  const db = getFirebaseDb();
+  if (db) {
+    try {
+      const docRef = doc(db, "teacher_accounts", cleanId);
+      await setDoc(docRef, updated, { merge: true });
+    } catch {}
+  }
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(TEACHER_ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), "utf-8");
+  } catch {}
+
+  return { ok: true, account: updated, message: `Đã cập nhật tài khoản GVCN lớp ${cleanId} thành công.` };
+}
+
+/**
+ * Đặt lại mật khẩu chung cho toàn bộ GVCN
+ */
+export async function resetAllTeacherPasswords(
+  newPassword?: string
+): Promise<{ ok: boolean; count: number; message: string }> {
+  const accounts = await getAllTeacherAccounts();
+  const pass = newPassword?.trim() || "Antam2025@";
+
+  accounts.forEach((a) => {
+    a.password = pass;
+    a.updatedAt = new Date().toISOString();
+  });
+
+  const db = getFirebaseDb();
+  if (db) {
+    try {
+      for (const acc of accounts) {
+        const docRef = doc(db, "teacher_accounts", acc.classId);
+        await setDoc(docRef, acc, { merge: true });
+      }
+    } catch {}
+  }
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(TEACHER_ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), "utf-8");
+  } catch {}
+
+  return {
+    ok: true,
+    count: accounts.length,
+    message: `Đã đặt lại mật khẩu cho tất cả ${accounts.length} GVCN thành '${pass}' thành công!`,
+  };
+}
+
+/**
+ * Nhập danh sách tài khoản GVCN từ Excel
+ */
+export async function importTeacherAccounts(
+  importedAccounts: Partial<TeacherAccountRecord>[],
+  overwrite: boolean = false
+): Promise<{ ok: boolean; count: number; message: string }> {
+  let accounts = overwrite ? [] : await getAllTeacherAccounts();
+
+  for (const item of importedAccounts) {
+    if (!item.classId && !item.className) continue;
+    const rawClassId = (item.classId || (item.className ? item.className.replace(/[^a-zA-Z0-9]/g, "") : "")).toUpperCase();
+    const cleanClassName = item.className || `Lớp ${rawClassId}`;
+    const gradeMatch = cleanClassName.match(/\b([6-9])/);
+    const grade = item.grade || (gradeMatch ? parseInt(gradeMatch[1], 10) : 8);
+
+    const record: TeacherAccountRecord = {
+      classId: rawClassId,
+      className: cleanClassName,
+      grade,
+      teacherName: item.teacherName?.trim() || "Chưa phân công",
+      username: item.username?.trim().toLowerCase() || `gvcn.${rawClassId.toLowerCase()}`,
+      password: item.password?.trim() || "Antam2025@",
+      phone: item.phone?.trim() || "",
+      email: item.email?.trim() || `${rawClassId.toLowerCase()}@thcsquangtrung.edu.vn`,
+      status: item.status === "locked" ? "locked" : "active",
+      updatedAt: new Date().toISOString(),
+    };
+
+    const idx = accounts.findIndex((a) => a.classId.toUpperCase() === rawClassId);
+    if (idx !== -1) {
+      accounts[idx] = { ...accounts[idx], ...record };
+    } else {
+      accounts.push(record);
+    }
+
+    const db = getFirebaseDb();
+    if (db) {
+      try {
+        const docRef = doc(db, "teacher_accounts", rawClassId);
+        await setDoc(docRef, record, { merge: true });
+      } catch {}
+    }
+  }
+
+  ensureDataDir();
+  try {
+    fs.writeFileSync(TEACHER_ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), "utf-8");
+  } catch {}
+
+  return {
+    ok: true,
+    count: accounts.length,
+    message: `Đã nhập và đồng bộ thành công ${accounts.length} tài khoản GVCN!`,
+  };
+}

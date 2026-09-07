@@ -338,5 +338,15 @@ export interface SchoolSecurityRole {
   permissions: string[];
 }
 
-
-
+export interface TeacherAccountInfo {
+  classId: string; // e.g. "8A6"
+  className: string; // e.g. "Lớp 8A6"
+  grade: number; // e.g. 8
+  teacherName: string; // e.g. "Nguyễn Thúy Hằng"
+  username: string; // e.g. "gvcn.8a6"
+  password: string; // e.g. "Antam2025@"
+  phone?: string;
+  email?: string;
+  status: "active" | "locked";
+  updatedAt?: string;
+}

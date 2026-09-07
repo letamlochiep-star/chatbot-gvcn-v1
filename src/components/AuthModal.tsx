@@ -131,14 +131,14 @@ export function AuthModal({ onSuccess }: Props) {
           <form onSubmit={handleTeacherSubmit} className="space-y-3 text-left">
             <div>
               <label className="block text-xs font-bold text-brandText uppercase mb-1">
-                Tài khoản Quản Trị / Email Giáo Viên
+                Tài khoản Đăng Nhập / Email GVCN
               </label>
               <input
                 type="text"
                 value={teacherEmail}
                 onChange={(e) => setTeacherEmail(e.target.value)}
                 required
-                placeholder="Nhập 'admin' hoặc email giáo viên"
+                placeholder="Nhập tên tài khoản hoặc email"
                 className="w-full h-11 px-3.5 text-sm border border-[#c9deed] rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition bg-[#fbfdff]"
               />
             </div>
@@ -152,13 +152,9 @@ export function AuthModal({ onSuccess }: Props) {
                 value={teacherPin}
                 onChange={(e) => setTeacherPin(e.target.value)}
                 required
-                placeholder="Nhập mật khẩu (Mặc định: Antam2025@)"
+                placeholder="Nhập mật khẩu"
                 className="w-full h-11 px-3.5 text-sm border border-[#c9deed] rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition bg-[#fbfdff]"
               />
-            </div>
-
-            <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 text-[11px] text-blue-900 leading-tight">
-              🏛️ <strong>Tài khoản Quản Trị Trường</strong>: <code>admin</code> • Mật khẩu: <code>Antam2025@</code>
             </div>
 
             <div className="pt-1">

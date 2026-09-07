@@ -9,15 +9,26 @@ import {
   batchImportClasses,
   clearAllClasses,
   resetDemoClasses,
+  getAllTeacherAccounts,
+  batchGenerateTeacherAccounts,
+  updateTeacherAccount,
+  resetAllTeacherPasswords,
+  importTeacherAccounts,
 } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const summary = searchParams.get("summary") === "true";
-    const grade = parseInt(searchParams.get("grade") || "8", 10);
+    const teacherAccounts = searchParams.get("teacherAccounts") === "true";
+    const grade = parseInt(searchParams.get("grade") || "0", 10);
     const week = parseInt(searchParams.get("week") || "1", 10);
     const classId = searchParams.get("classId");
+
+    if (teacherAccounts) {
+      const accounts = await getAllTeacherAccounts();
+      return NextResponse.json({ ok: true, accounts });
+    }
 
     if (summary) {
       const gradeSummary = await getGradeCompetitionSummary(week, grade);
@@ -26,7 +37,8 @@ export async function GET(request: NextRequest) {
 
     const classes = await getAllClasses(grade);
     if (classId) {
-      const found = classes.find((c) => c.classId === classId);
+      const cleanId = classId.toUpperCase();
+      const found = classes.find((c) => c.classId.toUpperCase() === cleanId);
       if (!found) {
         return NextResponse.json({ ok: false, message: "Không tìm thấy lớp học" }, { status: 404 });
       }
@@ -48,7 +60,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, classId, updates, newClass, classes, overwrite } = body;
+    const {
+      action,
+      classId,
+      updates,
+      newClass,
+      classes,
+      overwrite,
+      options,
+      newPassword,
+      accounts,
+    } = body;
 
     if (action === "updateClass" && classId && updates) {
       const result = await updateClassInfo(classId, updates);
@@ -80,9 +102,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result);
     }
 
+    // --- QUẢN LÝ TÀI KHOẢN GVCN ---
+    if (action === "getTeacherAccounts") {
+      const list = await getAllTeacherAccounts();
+      return NextResponse.json({ ok: true, accounts: list });
+    }
+
+    if (action === "batchGenerateTeacherAccounts") {
+      const result = await batchGenerateTeacherAccounts(options);
+      return NextResponse.json(result);
+    }
+
+    if (action === "updateTeacherAccount" && classId && updates) {
+      const result = await updateTeacherAccount(classId, updates);
+      return NextResponse.json(result);
+    }
+
+    if (action === "resetAllTeacherPasswords") {
+      const result = await resetAllTeacherPasswords(newPassword);
+      return NextResponse.json(result);
+    }
+
+    if (action === "importTeacherAccounts" && Array.isArray(accounts)) {
+      const result = await importTeacherAccounts(accounts, !!overwrite);
+      return NextResponse.json(result);
+    }
+
     return NextResponse.json({ ok: false, message: "Hành động không hợp lệ" }, { status: 400 });
   } catch (error) {
     console.error("Lỗi API classes POST:", error);
     return NextResponse.json({ ok: false, message: "Lỗi máy chủ nội bộ" }, { status: 500 });
   }
 }
+

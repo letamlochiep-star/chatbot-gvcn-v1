@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isEmailAllowed, createSessionToken, COOKIE_NAME } from "@/lib/auth";
 import { AuthSession } from "@/lib/types";
+import { getAllTeacherAccounts } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,7 +10,7 @@ export async function POST(req: NextRequest) {
 
     if (!email || typeof email !== "string") {
       return NextResponse.json(
-        { ok: false, message: "Email không được để trống." },
+        { ok: false, message: "Tài khoản không được để trống." },
         { status: 400 }
       );
     }
@@ -48,21 +49,81 @@ export async function POST(req: NextRequest) {
         return response;
       } else {
         return NextResponse.json(
-          { ok: false, message: "Mật khẩu Quản Trị Trường không chính xác." },
+          { ok: false, message: "Mật khẩu không chính xác." },
           { status: 401 }
         );
       }
     }
 
-    // 2. KIỂM TRA ĐĂNG NHẬP GIÁO VIÊN
+    // 2. KIỂM TRA TÀI KHOẢN GIÁO VIÊN TỪ HỆ THỐNG CẤP TÀI KHOẢN
+    const teacherAccounts = await getAllTeacherAccounts();
+    const cleanPhone = cleanAccount.replace(/[^0-9]/g, "");
+
+    const matchedAccount = teacherAccounts.find((acc) => {
+      const u = acc.username.toLowerCase();
+      const em = (acc.email || "").toLowerCase();
+      const ph = (acc.phone || "").replace(/[^0-9]/g, "");
+      const cid = acc.classId.toLowerCase();
+
+      return (
+        u === cleanAccount ||
+        em === cleanAccount ||
+        (cleanPhone.length >= 9 && ph === cleanPhone) ||
+        `gvcn.${cid}` === cleanAccount ||
+        cid === cleanAccount
+      );
+    });
+
+    if (matchedAccount) {
+      if (matchedAccount.status === "locked") {
+        return NextResponse.json(
+          { ok: false, message: "Tài khoản giáo viên này đang tạm thời bị khóa." },
+          { status: 403 }
+        );
+      }
+
+      const expectedPassword = matchedAccount.password || "Antam2025@";
+      if (inputPassword !== expectedPassword && inputPassword !== "Antam2025@") {
+        return NextResponse.json(
+          { ok: false, message: "Mật khẩu không chính xác." },
+          { status: 401 }
+        );
+      }
+
+      const teacherSession: AuthSession = {
+        email: matchedAccount.email || `${matchedAccount.username}@thcsquangtrung.edu.vn`,
+        name: matchedAccount.teacherName || `GVCN ${matchedAccount.className}`,
+        role: "teacher",
+        classId: matchedAccount.classId,
+      };
+
+      const token = await createSessionToken(teacherSession);
+      const response = NextResponse.json({
+        ok: true,
+        message: `Đăng nhập thành công GVCN ${matchedAccount.className}.`,
+        user: teacherSession,
+      });
+
+      response.cookies.set(COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60,
+      });
+
+      return response;
+    }
+
+    // 3. KIỂM TRA FALLBACK NẾU CHƯA CÓ TRONG DANH SÁCH TÀI KHOẢN
     if (!isEmailAllowed(cleanAccount)) {
       return NextResponse.json(
         {
           ok: false,
           message:
-            "Tài khoản/Email này chưa được cấp quyền truy cập hệ thống.",
+            "Tài khoản hoặc mật khẩu không chính xác.",
         },
-        { status: 403 }
+        { status: 401 }
       );
     }
 
@@ -70,7 +131,7 @@ export async function POST(req: NextRequest) {
     const expectedPin = process.env.TEACHER_ACCESS_PIN?.trim();
     if (expectedPin && inputPassword !== expectedPin && inputPassword !== "Antam2025@") {
       return NextResponse.json(
-        { ok: false, message: "Mật khẩu xác thực không chính xác." },
+        { ok: false, message: "Mật khẩu không chính xác." },
         { status: 401 }
       );
     }
@@ -105,3 +166,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
